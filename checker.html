@@ -27,6 +27,7 @@
   --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
 }
+:root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
@@ -50,6 +51,9 @@ a { color: var(--accent); }
 header.top { border-bottom: 2px solid var(--ink); background: var(--surface); }
 .top .wrap { display: flex; flex-direction: column; gap: 20px; padding-block: 22px 26px; }
 .brand { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; font-family: var(--display); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
+.brand-side { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.themebtn { min-height: 32px; padding: 0 12px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--muted); border-radius: 4px; cursor: pointer; }
+.themebtn:hover { background: var(--accent-soft); }
 .ask { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(30px, 4.6vw, 54px); line-height: 1.15; text-wrap: balance; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .ask select { field-sizing: content; font: inherit; color: var(--accent); background: var(--surface); border: 0; border-bottom: 4px solid var(--accent); border-radius: 0; padding: 0 4px 2px 0; max-width: 100%; cursor: pointer; }
 .ask select option { font-family: var(--body); font-size: 16px; font-weight: 400; color: var(--ink); }
@@ -132,7 +136,7 @@ footer p { margin: 0; max-width: 96ch; }
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><span>DM IFC checker</span><span id="stamp"></span></div>
+    <div class="brand"><span>DM IFC checker</span><span class="brand-side"><span id="stamp"></span><button type="button" class="themebtn" id="theme">Night mode</button></span></div>
     <h1 class="ask">
       <span>What is this model missing at</span>
       <label class="sr" for="q-phase">Stage</label>
@@ -1302,6 +1306,22 @@ END-ISO-10303-21;
     }
     else if (t.id === 'copy-ids') copy(t, listed(cur()).map(function (x) { return x.tag; }).filter(Boolean).join(';'));
   });
+
+  // Night / day mode. With no saved choice the page follows the device setting; the choice is shared with the requirements browser.
+  (function () {
+    var root = document.documentElement, btn = $('theme'), mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    var dark = function () { var t = root.getAttribute('data-theme'); return t ? t === 'dark' : !!(mq && mq.matches); };
+    var paint = function () { btn.textContent = dark() ? 'Day mode' : 'Night mode'; };
+    try { var saved = localStorage.getItem('dm-theme'); if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved); } catch (e) {}
+    btn.addEventListener('click', function () {
+      var next = dark() ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('dm-theme', next); } catch (e) {}
+      paint();
+    });
+    if (mq && mq.addEventListener) mq.addEventListener('change', paint);
+    paint();
+  })();
 
   $('schema').textContent = RULES.schema;
   $('stamp').textContent = 'Rule file schema v' + RULES.schema + ' · ' + RULES.versions.map(function (v) { return v.name; }).join(' and ');
