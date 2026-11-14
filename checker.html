@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DM IFC Checker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout idea: same sheet as the requirements browser. The question is the control on top, a schedule of element groups answers it, and the selected group opens below as a snag list. */
+:root {
+  --paper: #F1F4F3;
+  --surface: #FFFFFF;
+  --ink: #12212B;
+  --muted: #4F5F69;
+  --line: #C9D2D5;
+  --accent: #0B5C7A;
+  --accent-soft: #DCEBF0;
+  --on-accent: #FFFFFF;
+  --bad: #A3301C;
+  --bad-soft: #F6E2DD;
+  --ok: #1E6A45;
+  --warn: #7A5200;
+  --warn-soft: #F6ECD2;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
+    --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C;
+    --bad: #F2917D; --bad-soft: #3B1D17; --ok: #74CC9C; --warn: #E3B65E; --warn-soft: #33290F; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
+  --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C;
+  --bad: #F2917D; --bad-soft: #3B1D17; --ok: #74CC9C; --warn: #E3B65E; --warn-soft: #33290F; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+header.top { border-bottom: 2px solid var(--ink); background: var(--surface); }
+.top .wrap { display: flex; flex-direction: column; gap: 20px; padding-block: 22px 26px; }
+.brand { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; font-family: var(--display); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
+.ask { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(30px, 4.6vw, 54px); line-height: 1.15; text-wrap: balance; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.ask select { field-sizing: content; font: inherit; color: var(--accent); background: var(--surface); border: 0; border-bottom: 4px solid var(--accent); border-radius: 0; padding: 0 4px 2px 0; max-width: 100%; cursor: pointer; }
+.ask select option { font-family: var(--body); font-size: 16px; font-weight: 400; color: var(--ink); }
+.drop { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 14px 16px; border: 1px dashed var(--muted); background: var(--paper); }
+.drop.over { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.drop p { margin: 0; flex: 1 1 280px; min-width: 0; color: var(--muted); }
+.drop p b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.btn { min-height: 44px; padding: 0 16px; font: inherit; font-weight: 600; color: var(--on-accent); background: var(--accent); border: 1px solid var(--accent); border-radius: 4px; cursor: pointer; }
+.btn.ghost { color: var(--ink); background: var(--surface); border-color: var(--muted); }
+.btn.small { min-height: 34px; padding: 0 12px; font-size: 14px; }
+
+main.answer { display: flex; flex-direction: column; gap: 30px; padding-block: 28px 56px; min-width: 0; }
+.head { display: flex; flex-direction: column; gap: 10px; }
+.head h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; line-height: 1.15; text-wrap: balance; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.head h2 code { font-family: var(--mono); font-weight: 500; font-size: 15px; color: var(--muted); }
+.head p { margin: 0; max-width: 72ch; color: var(--muted); }
+.head p.verdict { font-size: 18px; font-weight: 500; color: var(--ink); }
+.verdict b { font-family: var(--display); font-size: 22px; font-weight: 700; }
+.verdict b.bad { color: var(--bad); }
+.verdict b.good { color: var(--ok); }
+.eyebrow { margin: 0; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.example { align-self: flex-start; padding: 2px 9px; font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); border-radius: 3px; }
+.block { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.bar .side { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--ink); border-radius: 4px; overflow: hidden; }
+.seg button { min-height: 44px; padding: 0 16px; font: inherit; font-weight: 500; color: var(--ink); background: var(--surface); border: 0; border-right: 1px solid var(--ink); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+section.sheet { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ink); min-width: 0; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+tbody tr:last-child td { border-bottom: 0; }
+thead th { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+th:first-child, td:first-child { padding-left: 16px; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.num { font-family: var(--mono); }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--accent-soft); }
+tr.pick[aria-current="true"] td { background: var(--ink); color: var(--paper); }
+tr.pick[aria-current="true"] .linkbtn, tr.pick[aria-current="true"] .type, tr.pick[aria-current="true"] .zero, tr.pick[aria-current="true"] .hot { color: var(--paper); }
+.linkbtn { padding: 0; font: inherit; font-weight: 600; color: var(--accent); background: none; border: 0; text-decoration: underline; cursor: pointer; text-align: left; }
+.name { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
+.note { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.type { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.hot { color: var(--bad); font-weight: 600; }
+.zero { color: var(--muted); }
+.meter { display: block; width: 120px; max-width: 100%; height: 8px; margin-top: 6px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--bad); }
+td.share { min-width: 150px; }
+td.miss { min-width: 260px; }
+.miss div { margin-bottom: 4px; }
+.miss div:last-child { margin-bottom: 0; }
+.miss .set { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.chip { display: inline-block; margin: 1px 4px 1px 0; padding: 1px 7px; font-family: var(--mono); font-size: 12.5px; background: var(--bad-soft); color: var(--bad); border-radius: 3px; }
+.chip.w { background: var(--warn-soft); color: var(--warn); }
+.done { color: var(--ok); font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; font-size: 14px; background: var(--accent-soft); border-radius: 3px; }
+.pill button { min-width: 28px; min-height: 28px; font: inherit; color: var(--ink); background: transparent; border: 0; cursor: pointer; }
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.notes p { margin: 0; max-width: 78ch; padding: 10px 14px; background: var(--warn-soft); color: var(--ink); border-left: 3px solid var(--warn); }
+.notes p code { font-family: var(--mono); font-size: 13px; }
+.empty { margin: 0; padding: 28px 16px; background: var(--surface); border: 1px dashed var(--muted); color: var(--muted); }
+.error { margin: 0; padding: 14px 16px; background: var(--bad-soft); color: var(--bad); border-left: 3px solid var(--bad); font-weight: 500; }
+progress { width: min(420px, 100%); height: 10px; accent-color: var(--accent); }
+.more { align-self: flex-start; }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+footer .wrap { padding-block: 16px 28px; }
+footer p { margin: 0; max-width: 96ch; }
+@media (max-width: 860px) {
+  .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .head h2 { font-size: 26px; }
+}
+@media (prefers-reduced-motion: no-preference) { .seg button, tr.pick td { transition: background-color 120ms; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span>DM IFC checker</span><span id="stamp"></span></div>
+    <h1 class="ask">
+      <span>What is this model missing at</span>
+      <label class="sr" for="q-phase">Stage</label>
+      <select id="q-phase"></select>
+      <span>stage?</span>
+    </h1>
+    <div class="drop" id="drop">
+      <p id="drop-text">Drop an <b>.ifc</b> file anywhere on this page. It is read in your browser and is not uploaded.</p>
+      <input class="sr" type="file" id="file" accept=".ifc,.IFC" tabindex="-1">
+      <button type="button" class="btn" id="choose">Choose IFC file</button>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+  <main class="answer" id="answer" aria-live="polite"></main>
+</div>
+<footer>
+  <div class="wrap"><p>Unofficial pre-check built from the <code>IDS.json</code> rule file (schema version <span id="schema"></span>) that ships with the Dubai Municipality BIM tools. It checks that required properties exist and hold a value; it does not check geometry, usage codes or the values themselves. The official QA/QC checker remains the authority. See the <a href="index.html">requirements browser</a> for what each element needs.</p></div>
+</footer>
+<script id="rules-data" type="application/json">{"schema":"1","phases":["Preliminary","Final","Inspection"],"versions":[{"name":"IFC2x3","groups":[{"name":"Project","type":"IfcProject","subs":[["NOTFOUND","PROJECT"]],"attrs":[["Pset_ProjectCommon","ConstructionMode","ConstructionMode","string","New construction","010"],["Building Permit","ParcelId","ParcelId","double","111111","010"],["Building Permit","BIMStandardVersion","BIMStandardVersion","string","1.3","010"]]},{"name":"Topography (Site)","type":"IfcSite","subs":[["NOTFOUND","SITE"]],"attrs":[["Building Permit","GateLevel","GateLevel","double","50","010"]]},{"name":"Building","type":"IfcBuilding","subs":[["NOTFOUND","BUILDING"]],"attrs":[["IfcBuilding attribute","Description","Description","string","","010"],["IfcBuilding attribute","LongName","LongName","double","111111","010"],["IfcBuilding attribute","BuildingAddress","BuildingAddress","string","Enclosed Offices","010"],["Pset_BuildingCommon","ConstructionMethod","ConstructionMethod","string","","010"],["Pset_BuildingCommon","FireProtectionClass","FireProtectionClass","string","","010"],["Pset_BuildingCommon","SprinklerProtection","SprinklerProtection","bool","YES/NO","010"],["Pset_BuildingCommon","YearOfConstruction","YearOfConstruction","double","2024","010"],["Pset_BuildingCommon","IsLandmarked","IsLandmarked","bool","YES/NO","010"],["Qto_BuildingBaseQuantities","Height","Height","double","","010"],["Building Permit","BuildingNum","BuildingNum","double","1","010"],["Building Permit","Occupancy","Occupancy","string","RESIDENTIAL,COMMERCIAL","010"],["Building Permit","OccupancyUse","OccupancyUse","string","residential apartments,shops","010"],["Building Permit","OccupancyUsageCode","OccupancyUsageCode","string","MS.1.1,MS.3.2","010"],["Building Permit","TotalBuildupArea","TotalBuildupArea","double","1","010"],["Building Permit","TotalGrossArea","TotalGrossArea","double","1","010"],["Building Permit","TotalFloorGrossArea","TotalFloorGrossArea","double","1","010"],["Building Permit","TotalNetArea","TotalNetArea","double","1","010"],["Building Permit","RecycledConcreteVolume","RecycledConcreteVolume","double","150","000"],["Building Permit","RecycledSteelWeight","RecycledSteelWeight","double","4500","000"],["Building Permit","RecycledAluminiumWeight","RecycledAluminiumWeight","double","500","000"],["Building Permit","RecycledGypsumWeight","RecycledGypsumWeight","double","600","000"]]},{"name":"Storey","type":"IfcBuildingStorey","subs":[["NOTFOUND","BUILDINGSTOREY"]],"attrs":[["Qto_BuildingStoreyBaseQuantities","GrossHeight","GrossHeight","double","1","010"],["Qto_BuildingStoreyBaseQuantities","NetHeigtht","NetHeigtht","double","1","010"],["Building Permit","TotalBuildupArea","TotalBuildupArea","double","1","010"],["Building Permit","TotalGrossArea","TotalGrossArea","double","1","010"],["Building Permit","TotalFloorGrossArea","TotalFloorGrossArea","double","1","010"],["Building Permit","TotalNetArea","TotalNetArea","double","1","010"],["Building Permit","BuildingPartNum","BuildingPartNum","double","1","000"]]},{"name":"Beam","type":"IfcBeam","subs":[["BEAM",""],["JOIST",""],["LINTEL",""],["T_BEAM",""]],"attrs":[["Qto_BeamBaseQuantities","Length","Length","double","1","010"],["Qto_BeamBaseQuantities","Area","Area","double","1","010"],["Qto_BeamBaseQuantities","GrossVolume","GrossVolume","double","1","010"],["Qto_BeamBaseQuantities","NetVolume","NetVolume","double","1","010"],["Pset_BeamCommon","Status","Status","string","New, Existing","010"],["Pset_BeamCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_BeamCommon","FireRating","FireRating","int","60","010"],["Pset_BeamCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_BeamCommon","Slope","Slope","double","100","010"],["Pset_BeamCommon","Capacity","Capacity","string","10","010"],["Pset_BeamCommon","Span","Span","double","1","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Free Text","000"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Pset_ConcreteElementGeneral","Concrete Cover","ConcreteCover","string","1","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Civil Element","type":"IfcCivilElement","subs":[["NOTFOUND","CIVILELEMENT"]],"attrs":[]},{"name":"Column","type":"IfcColumn","subs":[["COLUMN",""]],"attrs":[["Qto_ColumnBaseQuantities","Length","Length","double","1","010"],["Qto_ColumnBaseQuantities","Area","Area","double","1","010"],["Qto_ColumnBaseQuantities","GrossVolume","GrossVolume","double","1","010"],["Pset_ColumnCommon","Status","Status","string"," Existing","010"],["Pset_ColumnCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_ColumnCommon","ThermalTransmittance","ThermalTransmittance","double","5.76","000"],["Pset_ColumnCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_ColumnCommon","FireRating","FireRating","int","60","010"],["Pset_ColumnCommon","Slope","Slope","double","1","010"],["Pset_ColumnCommon","Capacity","Capacity","string","10","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Free Text","000"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","0.71","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","0.24","010"],["Pset_ConcreteElementGeneral","ConcreteCover","ConcreteCover","string","1m","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30.25","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Covering (Finishes)","type":"IfcCovering","subs":[["CEILING",""],["FLOORING",""],["CLADDING",""],["ROOFING",""],["INSULATION",""],["MEMBRANE",""],["SLEEVING",""],["WRAPPING",""],["USERDEFINED","DRIVEWAYPARALLEL"],["USERDEFINED","DRIVEWAY45"],["USERDEFINED","DRIVEWAY60"],["USERDEFINED","DRIVEWAY75"],["USERDEFINED","DRIVEWAY90ONEWAY"],["USERDEFINED","DRIVEWAY90TWOWAY"],["USERDEFINED","GRASS"],["USERDEFINED","PLASTER"]],"attrs":[["Qto_CoveringBaseQuantities","Width","Width","double","2","010"],["Qto_CoveringBaseQuantities","GrossArea","GrossArea","double","3","010"],["Pset_CoveringCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_CoveringCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_CoveringCommon","Finish","Finish","string","Carpet","010"],["Pset_CoveringCommon","FireRating","FireRating","int","120","010"],["Pset_CoveringCommon","FlammabilityRating","FlammabilityRating","double","40","010"],["Pset_CoveringCommon","FragilityRating","FragilityRating","double","30","010"],["Pset_CoveringCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_CoveringCommon","Status","Status","string","Existing, New","010"],["Pset_CoveringCommon","SurfaceSpreadOfFlame","SurfaceSpreadOfFlame","double","4","010"],["Pset_CoveringCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","Recyclable","Recyclable","bool","","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Curtain Wall","type":"IfcCurtainWall","subs":[["NOTFOUND","CURTAINWALL"]],"attrs":[["Qto_CurtainWallBaseQuantities","Length","Length","double","2","010"],["Qto_CurtainWallBaseQuantities","Width","Width","double","2","010"],["Qto_CurtainWallBaseQuantities","Height","Height","double","2","010"],["Qto_CurtainWallBaseQuantities","GrossSideArea","GrossSideArea","double","2","010"],["Qto_CurtainWallBaseQuantities","NetSideArea","NetSideArea","double","15","010"],["Qto_CurtainWallBaseQuantities","Area","Area","double","40","010"],["Pset_CurtainWallCommon","Status","Status","string","New, Existing","010"],["Pset_CurtainWallCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_CurtainWallCommon","FireRating","FireRating","int","120","010"],["Pset_CurtainWallCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_CurtainWallCommon","AcousticRating","AcousticRating","string","0.04","010"],["Pset_CurtainWallCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_CurtainWallCommon","SurfaceSpreadOfFlame","SurfaceSpreadOfFlame","double","25","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","0.8","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Glass","010"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Door","type":"IfcDoor","subs":[["GATE",""],["USERDEFINED","ELEVATORDOOR"],["USERDEFINED","BALCONYDOOR"],["USERDEFINED","GARBAGEROOMDOOR"],["USERDEFINED","ENTRYDOOR"],["USERDEFINED","GENERALDOOR"],["USERDEFINED","BATHROOMDOOR"],["USERDEFINED","TOILETDOOR"],["USERDEFINED","EXITDOOR"],["USERDEFINED","EXITACCESSDOOR"],["USERDEFINED","DOUBLEGARAGEDOOR"],["USERDEFINED","SINGLEGARAGEDOOR"],["USERDEFINED","MAINENTRANCEDOOR"],["USERDEFINED","SERVICEDOOR"]],"attrs":[["Qto_DoorBaseQuantities","Width","Width","double","2","010"],["Qto_DoorBaseQuantities","Height","Height","double","2","010"],["Qto_DoorBaseQuantities","Area","Area","double","3","010"],["Qto_DoorBaseQuantities","Perimeter","Perimeter","double","6","010"],["Pset_DoorCommon","Status","Status","string","Existing, New","010"],["Pset_DoorCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_DoorCommon","FireRating","FireRating","int","60","010"],["Pset_DoorCommon","SelfClosing","SelfClosing","bool","YES/NO","010"],["Pset_DoorCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_DoorCommon","HasDrive","HasDrive","bool","YES/NO","010"],["Building Permit","HasDrive","HasDrive","bool","YES/NO","010"],["Pset_DoorCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","SelfClosing","SelfClosing","bool","YES/NO","010"],["Pset_DoorCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_DoorCommon","SecurityRating","SecurityRating","string","0.1","010"],["Pset_DoorCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_DoorCommon","SmokeStop","SmokeStop","bool","YES/NO","010"],["Building Permit","IsEntrance","IsEntrance","bool","YES/NO","010"],["Building Permit","SelfLatching","SelfLatching","bool","YES/NO","010"],["Building Permit","SelfLocking","SelfLocking","bool","YES/NO","010"],["Building Permit","HardwareHeight","HardwareHeight","double","1.3","010"],["Building Permit","HasVisionPanel","HasVisionPanel","bool","YES/NO","010"],["Building Permit","DoorClearWidth","DoorClearWidth","double","0.9","010"],["Building Permit","Operation","Operation","string","Outside/ Inside","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Wood","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","100","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","Recyclable","Recyclable","bool","","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"ElementAssembly","type":"IfcElementAssembly","subs":[["ACCESSORY_ASSEMBLY",""],["ARCH",""],["BEAM_GRID",""],["BRACED_FRAME",""],["GIRDER",""],["REINFORCEMENT_UNIT",""],["RIGID_FRAME",""],["SLAB_FIELD",""],["TRUSS",""],["USERDEFINED","LADDER"]],"attrs":[["Building Permit","Length","Length","double","5","000"],["Building Permit","Height","Height","double","6","000"],["Building Permit","Depth","Depth","double","2","000"],["Building Permit","Description","Description","string","","010"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Floor (Slabs)","type":"IfcSlab","subs":[["FLOOR",""],["ROOF",""],["LANDING",""],["BASESLAB",""],["USERDEFINED","GRASS"],["USERDEFINED","ONEWAYINTERNALROAD"],["USERDEFINED","TWOWAYINTERNALROAD"],["USERDEFINED","ONEWAYEXTERNALROAD"],["USERDEFINED","TWOWAYEXTERNALROAD"],["USERDEFINED","ONEWAYTRUCKROAD"],["USERDEFINED","TWOWAYTRUCKROAD"],["USERDEFINED","ACCESSIBLERAMP"]],"attrs":[["Qto_SlabBaseQuantities","Length","Length","double","1","010"],["Qto_SlabBaseQuantities","Width","Width","double","1","010"],["Qto_SlabBaseQuantities","Area","Area","double","3","010"],["Qto_SlabBaseQuantities","Volume","Volume","double","3","010"],["Qto_SlabBaseQuantities","Perimeter","Perimeter","double","6","010"],["Qto_SlabBaseQuantities","Thickness","Depth","double","0.02","010"],["Pset_SlabCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_SlabCommon","Status","Status","string","New, Existing","010"],["Pset_SlabCommon","Fire Compartment","Compartmentation","bool","YES/NO","010"],["Pset_SlabCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_SlabCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_SlabCommon","FireRating","FireRating","int","60","010"],["Pset_SlabCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_SlabCommon","PitchAngle","PitchAngle","double","45","010"],["Pset_SlabCommon","SurfaceSpreadOfFlame","SurfaceSpreadOfFlame","double","4","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Text","000"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","20","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","30","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Foundation","type":"IfcFooting","subs":[["FOOTING_BEAM",""],["PAD_FOOTING",""],["PILE_CAP",""],["STRIP_FOOTING",""]],"attrs":[["Qto_FootingBaseQuantities","Length","Length","double","10","010"],["Qto_FootingBaseQuantities","Width","Width","double","3","010"],["Qto_FootingBaseQuantities","Height","Height","double","10","010"],["Qto_FootingBaseQuantities","NetVolume","NetVolume","double","10","010"],["Pset_FootingCommon","Status","Status","string","New, Existing","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Text","000"],["Pset_ConcreteElementGeneral","ConstructionMethod","ConstructionMethod","string","In-Situ, Precast","010"],["Pset_ConcreteElementGeneral","StructuralClass","StructuralClass","string","S1","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Member","type":"IfcMember","subs":[["BRACE",""],["CHORD",""],["COLLAR",""],["MEMBER",""],["MULLION",""],["PLATE",""],["POST",""],["PURLIN",""],["RAFTER",""],["STRINGER",""],["STRUT",""],["STUD",""]],"attrs":[["Pset_MemberCommon","Span","Span","double","5","010"],["Pset_MemberCommon","Slope","Slope","double","2","010"],["Pset_MemberCommon","Roll","Roll","double","","010"],["Pset_MemberCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_MemberCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_MemberCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_MemberCommon","FireRating","FireRating","int","120","010"],["Pset_MemberCommon","Status","Status","string","New, Existing","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Pset_PrecastConcreteElementGeneral","TypeDesignator","TypeDesignator","string","","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Parking (Spaces)","type":"IfcSpace","subs":[["PARKING",""],["PARKING","PARALLEL"],["PARKING","90DEGREE"],["PARKING","45DEGREE"],["PARKING","60DEGREE"],["PARKING","75DEGREE"],["PARKING","LOADINGTRUCK12M"],["PARKING","LOADINGTRUCK15M"],["PARKING","LOADINGTRUCK9M"]],"attrs":[["Pset_SpaceCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_SpaceCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","ParkingUse","ParkingUse","string","BUS","010"],["Building Permit","E-Charging","E-Charging","bool","YES/NO","010"],["Building Permit","ParkingUnits","ParkingUnits","string","10 Units","010"],["Building Permit","IsAisle","IsAisle","bool","YES/NO","010"],["Building Permit","HasWheelStop","HasWheelStop","bool","YES/NO","010"]]},{"name":"Pile","type":"IfcPile","subs":[["COHESION",""],["FRICTION",""],["SUPPORT",""]],"attrs":[["Pset_PileCommon","Status","Status","string","New, Existing","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","20","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","10","010"],["Pset_PrecastConcreteElementGeneral","TypeDesignator","TypeDesignator","string","CastInSitu","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCode","MaterialPassportCode","string","","000"]]},{"name":"Plate","type":"IfcPlate","subs":[["CURTAIN_PANEL",""],["SHEET",""]],"attrs":[["Pset_PlateCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_PlateCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_PlateCommon","FireRating","FireRating","int","60","010"],["Pset_PlateCommon","Status","Status","string","New, Existing","010"],["Pset_PlateCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_PlateCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Pset_PrecastConcreteElementGeneral","TypeDesignator","TypeDesignator","string","","010"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Railing","type":"IfcRailing","subs":[["HANDRAIL",""],["GUARDRAIL",""],["BALUSTRADE",""],["USERDEFINED","STAIRWAYRAILING"],["USERDEFINED","BALCONYRAILING"],["USERDEFINED","RAMPRAILING"],["USERDEFINED","PLOTFENCE"]],"attrs":[["Qto_RailingBaseQuantities","Length","Length","double","3","010"],["Pset_RailingCommon","Height","Height","double","12","010"],["Pset_RailingCommon","Status","Status","string","New, Existing","010"],["Pset_RailingCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Ramp","type":"IfcRamp","subs":[["STRAIGHT",""],["SPIRAL",""],["USERDEFINED","ACCESSIBLERAMP"],["USERDEFINED","CURBRAMP"],["USERDEFINED","SERVICERAMP"],["USERDEFINED","SINGLELANERAMP"],["USERDEFINED","DOUBLELANERAMP"]],"attrs":[["Pset_RampCommon","Status","Status","string","New, Existing","010"],["Pset_RampCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_RampCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_RampCommon","RequiredSlope","RequiredSlope","double","2","010"],["Pset_RampCommon","FireRating","FireRating","int","60","010"],["Pset_RampCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"]]},{"name":"Ramp Flight","type":"IfcRampFlight","subs":[["STRAIGHT",""],["SPIRAL",""],["USERDEFINED","ACCESSIBLERAMP"],["USERDEFINED","CURBRAMP"],["USERDEFINED","SERVICERAMP"],["USERDEFINED","SINGLELANERAMP"],["USERDEFINED","DOUBLELANERAMP"]],"attrs":[["Qto_RampFlightBaseQuantities","Length","Length","double","1","010"],["Qto_RampFlightBaseQuantities","Width","Width","double","2","010"],["Qto_RampFlightBaseQuantities","Area","Area","double","3","010"],["Qto_RampFlightBaseQuantities","Volume","Volume","double","1","010"],["Pset_RampFlightCommon","Slope","Slope","double","2","010"]]},{"name":"Roof","type":"IfcRoof","subs":[["FLAT_ROOF",""],["SHED_ROOF",""],["GABLE_ROOF",""],["HIP_ROOF",""],["HIPPED_GABLE_ROOF",""],["GAMBREL_ROOF",""],["MANSARD_ROOF",""],["BARREL_ROOF",""],["RAINBOW_ROOF",""],["BUTTERFLY_ROOF",""],["PAVILION_ROOF",""],["DOME_ROOF",""],["FREEFORM",""],["USERDEFINED","PERGOLA"],["USERDEFINED","CANOPY"]],"attrs":[["Qto_RoofBaseQuantities","Area","Area","double","3","010"],["Pset_RoofCommon","Status","Status","string","New, Existing","010"],["Pset_RoofCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_RoofCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_RoofCommon","FireRating","FireRating","int","120","010"],["Pset_RoofCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","PitchAngle","PitchAngle","double","31","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gupsum ","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","IsAccessible","IsAccessible","bool","YES/NO","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Room (Spaces)","type":"IfcSpace","subs":[["USERDEFINED","SINGLELOADEDCORRIDOR"],["USERDEFINED","DOUBLELOADEDCORRIDOR"],["USERDEFINED","STALLDOORINSIDE"],["USERDEFINED","STALLDOOROUTSIDE"],["USERDEFINED","ELEVATORSGROUPLINE"],["USERDEFINED","ELEVATORSGROUPFACING"],["USERDEFINED","SINGLEOPENGRAGE"],["USERDEFINED","DOUBLEENCLOSEDGARAGE"],["USERDEFINED","ROOMUNDERSTAIR"],["USERDEFINED","ENTRANCE"],["USERDEFINED","CLOSEDAREAKIOSK"],["USERDEFINED","OPENMALLKIOSK"]],"attrs":[["Qto_SpaceBaseQuantities","Height","Height","double","2","010"],["Qto_SpaceBaseQuantities","Area","Area","double","3","010"],["Qto_SpaceBaseQuantities","Volume","Volume","double","3","010"],["Qto_SpaceBaseQuantities","Perimeter","Perimeter","double","10","010"],["Pset_SpaceCommon","PubliclyAccessible","PubliclyAccessible","bool","YES/NO","010"],["Building Permit","PubliclyAccessible","PubliclyAccessible","bool","YES/NO","010"],["Pset_SpaceCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_SpaceCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","SprinklerProtection","SprinklerProtection","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","IsCovered","IsCovered","bool","YES/NO","010"],["Building Permit","IsLightWeightCovering","IsLightWeightCovering","bool","YES/NO","010"],["Building Permit","IsHabitableSpace","IsHabitableSpace","bool","YES/NO","010"],["Building Permit","IsOccupiedSpace","IsOccupiedSpace","bool","YES/NO","010"],["Building Permit","IsCirculationSpace","IsCirculationSpace","bool","YES/NO","010"],["Building Permit","IsCommonFacility","IsCommonFacility","bool","YES/NO","010"],["Building Permit","SpaceUsageCode","SpaceUsageCode","string","SC_25_15_10","010"],["Building Permit","SpaceUsageDescription","SpaceUsageDescription","string","Living Room","010"],["Building Permit","UnitNo","UnitNo","string","1","000"],["Building Permit","UnitUsageCode","UnitUsageCode","string","RE_01","000"],["Building Permit","UnitUsageDescription","UnitUsageDescription","string","villa","000"],["Building Permit","UnitExtraInfo","UnitExtraInfo","string","[Showers:5],[WCs:2]","000"],["Building Permit","BuildingOccupancyUsageCode","BuildingOccupancyUsageCode","string","PB_04_03","010"],["Building Permit","BuildingOccupancyUsageDescription","BuildingOccupancyUsageDescription","string","Cinema","010"],["Building Permit","ZoneName","ZoneName","string","LU_F1","010"],["Building Permit","ZoneObjectType","ZoneObjectType","string","LivingUnit","010"]]},{"name":"Stair","type":"IfcStair","subs":[["STRAIGHT_RUN_STAIR",""],["TWO_STRAIGHT_RUN_STAIR",""],["QUARTER_WINDING_STAIR",""],["QUARTER_TURN_STAIR",""],["HALF_WINDING_STAIR",""],["HALF_TURN_STAIR",""],["TWO_QUARTER_WINDING_STAIR",""],["TWO_QUARTER_TURN_STAIR",""],["THREE_QUARTER_WINDING_STAIR",""],["THREE_QUARTER_TURN_STAIR",""],["SPIRAL_STAIR",""],["DOUBLE_RETURN_STAIR",""],["CURVED_RUN_STAIR",""],["TWO_CURVED_RUN_STAIR",""],["USERDEFINED","FIREEXITSTAIR"],["USERDEFINED","REGULARSTAIR"],["USERDEFINED","COMMONSTAIR"]],"attrs":[["Pset_StairCommon","Status","Status","string","New, Existing","010"],["Pset_StairCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_StairCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_StairCommon","NumberOfRiser","NumberOfRiser","double","15","010"],["Pset_StairCommon","NumberOfTreads","NumberOfTreads","double","15","010"],["Pset_StairCommon","RiserHeight","RiserHeight","double","2","010"],["Pset_StairCommon","TreadLength","TreadLength","double","2","010"],["Pset_StairCommon","NosingLength","NosingLength","double","0.02","010"],["Pset_StairCommon","WaistThickness","WaistThickness","double","0.05","010"],["Pset_StairCommon","FireRating","FireRating","int","120","010"],["Pset_StairCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Pset_StairCommon","HasNonSkidSurface","HasNonSkidSurface","bool","YES/NO","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","IsSlipResistant","IsSlipResistant","bool","YES/NO","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"StairFlight","type":"IfcStairFlight","subs":[["STRAIGHT",""],["WINDER",""],["SPIRAL",""],["CURVED",""],["FREEFORM",""],["USERDEFINED","FIREEXITSTAIR"],["USERDEFINED","REGULARSTAIR"],["USERDEFINED","COMMONSTAIR"]],"attrs":[["Pset_StairFlightCommon","Staus","Staus","string","New, Existing","010"],["Pset_StairFlightCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_StairFlightCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_StairFlightCommon","NumberOfRiser","NumberOfRiser","double","15","010"],["Pset_StairFlightCommon","NumberOfTreads","NumberOfTreads","double","15","010"],["Pset_StairFlightCommon","RiserHeight","RiserHeight","double","2","010"],["Pset_StairFlightCommon","TreadLength","TreadLength","double","2","010"],["Pset_StairFlightCommon","NosingLength","NosingLength","double","0.02","010"],["Pset_StairFlightCommon","WaistThickness","WaistThickness","double","0.05","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","IsSlipResistant","IsSlipResistant","bool","YES/NO","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Transport Element","type":"IfcTransportElement","subs":[["ELEVATOR",""],["ESCALATOR",""],["MOVINGWALKWAY",""],["USERDEFINED","PASSENGER"],["USERDEFINED","SERVICE"],["USERDEFINED","FIRE"]],"attrs":[["Pset_TransportElementCommon","Status","Status","string","New, Existing","010"],["Pset_TransportElementCommon","CapacityPeople","CapacityPeople","double","200","010"],["Pset_TransportElementCommon","CapacityWeight","CapacityWeight","double","20000","010"],["Pset_TransportElementCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"]]},{"name":"Wall","type":"IfcWall","subs":[["STANDARD",""],["POLYGONAL",""],["SHEAR",""],["ELEMENTEDWALL",""],["PLUMBINGWALL",""],["USERDEFINED","FACADEWALL"],["USERDEFINED","BASEMENTWALL"],["USERDEFINED","PARAPETWALL"],["USERDEFINED","CURTAINWALL"],["USERDEFINED","SHAFTWALL"],["USERDEFINED","PLANTERWALL"]],"attrs":[["Qto_WallBaseQuantities","Length","Length","double","1","010"],["Qto_WallBaseQuantities","Width","Width","double","1","010"],["Qto_WallBaseQuantities","Hight","Hight","double","3","010"],["Qto_WallBaseQuantities","Volume","Volume","double","3","010"],["Qto_WallBaseQuantities","Area","Area","double","3","010"],["Pset_WallCommon","Status","Status","string","Existing, New","010"],["Pset_WallCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_WallCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_WallCommon","FireRating","FireRating","int","120","010"],["Building Permit","FireRating","FireRating","int","120","010"],["Pset_WallCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_WallCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_WallCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_WallCommon","Compartmentation","Compartmentation","bool","YES/NO","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","Number (0..1)","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","Number (0..1)","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Waste Terminal","type":"IfcWasteTerminal","subs":[["USERDEFINED","GARBAGEBIN"]],"attrs":[["Pset_WasteTerminalTypeCommon","Status","Status","string","New, Existing","010"]]},{"name":"Water Tank","type":"IfcTank","subs":[["PREFORMED",""],["SECTIONAL",""],["EXPANSION",""],["PRESSUREVESSEL",""],["USERDEFINED","COLDWATERTANK"],["USERDEFINED","HOTWATERTANK"]],"attrs":[["Pset_TankTypeCommon","Status","Status","string","New, Existing","010"],["Pset_TankTypeCommon","StorageType","StorageType","string","underground","010"],["Pset_TankOccurrence","HasLadder","HasLadder","bool","YES/NO","010"]]},{"name":"Window","type":"IfcWindow","subs":[["USERDEFINED","SLIDING"],["USERDEFINED","OPENABLE"]],"attrs":[["Qto_WindowBaseQuantities","Width","Width","double","7","010"],["Qto_WindowBaseQuantities","Area","Area","double","3","010"],["Qto_WindowBaseQuantities","Perimeter","Perimeter","double","6","010"],["Pset_WindowCommon","Status","Status","string","Existing, New","010"],["Pset_WindowCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_WindowCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_WindowCommon","GlazedAreaFraction","GlazedAreaFraction","double","30","010"],["Pset_WindowCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_WindowCommon","FireRating","FireRating","int","120","010"],["Pset_WindowCommon","HasSillExternal","HasSillExternal","bool","YES/NO","010"],["Pset_WindowCommon","HasSillInternal","HasSillInternal","bool","YES/NO","010"],["Pset_WindowCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","Color","Color","string","White","010"],["Building Permit","Operation","Operation","string","Sliding/Openable/fixed","010"],["Building Permit","Sill Height","Sill Height","double","0.9","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Aluminum","010"],["Building Permit","Recyclable","Recyclable","bool","","000"],["Building Permit","RecycledAluminium Ratio","RecycledAluminium Ratio","double","0.3","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]}]},{"name":"IFC4","groups":[{"name":"Project","type":"IfcProject","subs":[["NOTFOUND","PROJECT"]],"attrs":[["Pset_ProjectCommon","ConstructionMode","ConstructionMode","string","New construction","010"],["Building Permit","ParcelId","ParcelId","double","111111","010"],["Building Permit","BIMStandardVersion","BIMStandardVersion","string","1.3","010"]]},{"name":"Topography (Site)","type":"IfcSite","subs":[["NOTFOUND","SITE"]],"attrs":[["Building Permit","GateLevel","GateLevel","double","50","010"]]},{"name":"Building","type":"IfcBuilding","subs":[["NOTFOUND","BUILDING"]],"attrs":[["IfcBuilding attribute","Description","Description","string","","010"],["IfcBuilding attribute","LongName","LongName","double","111111","010"],["IfcBuilding attribute","BuildingAddress","BuildingAddress","string","Enclosed Offices","010"],["Pset_BuildingCommon","ConstructionMethod","ConstructionMethod","string","","010"],["Pset_BuildingCommon","FireProtectionClass","FireProtectionClass","string","","010"],["Pset_BuildingCommon","SprinklerProtection","SprinklerProtection","bool","YES/NO","010"],["Pset_BuildingCommon","YearOfConstruction","YearOfConstruction","double","2024","010"],["Pset_BuildingCommon","IsLandmarked","IsLandmarked","bool","YES/NO","010"],["Qto_BuildingBaseQuantities","Height","Height","double","","010"],["Building Permit","BuildingNum","BuildingNum","double","1","010"],["Building Permit","Occupancy","Occupancy","string","RESIDENTIAL,COMMERCIAL","010"],["Building Permit","OccupancyUse","OccupancyUse","string","residential apartments,shops","010"],["Building Permit","OccupancyUsageCode","OccupancyUsageCode","string","MS.1.1,MS.3.2","010"],["Building Permit","TotalBuildupArea","TotalBuildupArea","double","1","010"],["Building Permit","TotalGrossArea","TotalGrossArea","double","1","010"],["Building Permit","TotalFloorGrossArea","TotalFloorGrossArea","double","1","010"],["Building Permit","TotalNetArea","TotalNetArea","double","1","010"],["Building Permit","RecycledConcreteVolume","RecycledConcreteVolume","double","150","000"],["Building Permit","RecycledSteelWeight","RecycledSteelWeight","double","4500","000"],["Building Permit","RecycledAluminiumWeight","RecycledAluminiumWeight","double","500","000"],["Building Permit","RecycledGypsumWeight","RecycledGypsumWeight","double","600","000"]]},{"name":"Storey","type":"IfcBuildingStorey","subs":[["NOTFOUND","BUILDINGSTOREY"]],"attrs":[["Qto_BuildingStoreyBaseQuantities","GrossHeight","GrossHeight","double","1","010"],["Qto_BuildingStoreyBaseQuantities","NetHeigtht","NetHeigtht","double","1","010"],["Building Permit","TotalBuildupArea","TotalBuildupArea","double","1","010"],["Building Permit","TotalGrossArea","TotalGrossArea","double","1","010"],["Building Permit","TotalFloorGrossArea","TotalFloorGrossArea","double","1","010"],["Building Permit","TotalNetArea","TotalNetArea","double","1","010"],["Building Permit","BuildingPartNum","BuildingPartNum","double","1","000"]]},{"name":"Beam","type":"IfcBeam","subs":[["BEAM",""],["JOIST",""],["HOLLOWCORE",""],["LINTEL",""],["SPANDREL",""],["T_BEAM",""],["GIRDER_SEGMENT",""],["DIAPHRAGM",""],["PIERCAP",""],["HATSTONE",""],["CORNICE",""],["EDGEBEAM",""]],"attrs":[["Qto_BeamBaseQuantities","Length","Length","double","1","010"],["Qto_BeamBaseQuantities","Area","Area","double","1","010"],["Qto_BeamBaseQuantities","GrossVolume","GrossVolume","double","1","010"],["Qto_BeamBaseQuantities","NetVolume","NetVolume","double","1","010"],["Pset_BeamCommon","Status","Status","string","New, Existing","010"],["Pset_BeamCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_BeamCommon","FireRating","FireRating","int","60","010"],["Pset_BeamCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_BeamCommon","Slope","Slope","double","100","010"],["Pset_BeamCommon","Capacity","Capacity","string","10","010"],["Pset_BeamCommon","Span","Span","double","1","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Free Text","000"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Pset_ConcreteElementGeneral","Concrete Cover","ConcreteCover","string","1","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Civil Element","type":"IfcCivilElement","subs":[["NOTFOUND","CIVILELEMENT"]],"attrs":[]},{"name":"Column","type":"IfcColumn","subs":[["COLUMN",""],["PILASTER",""],["PIERSTEM",""],["PIERSTEM_SEGMENT",""],["STANDCOLUMN",""]],"attrs":[["Qto_ColumnBaseQuantities","Length","Length","double","1","010"],["Qto_ColumnBaseQuantities","Area","Area","double","1","010"],["Qto_ColumnBaseQuantities","GrossVolume","GrossVolume","double","1","010"],["Pset_ColumnCommon","Status","Status","string"," Existing","010"],["Pset_ColumnCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_ColumnCommon","ThermalTransmittance","ThermalTransmittance","double","5.76","000"],["Pset_ColumnCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_ColumnCommon","FireRating","FireRating","int","60","010"],["Pset_ColumnCommon","Slope","Slope","double","1","010"],["Pset_ColumnCommon","Capacity","Capacity","string","10","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Free Text","000"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","0.71","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","0.24","010"],["Pset_ConcreteElementGeneral","ConcreteCover","ConcreteCover","string","1m","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30.25","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Covering (Finishes)","type":"IfcCovering","subs":[["CEILING",""],["FLOORING",""],["CLADDING",""],["ROOFING",""],["MOLDING",""],["SKIRTINGBOARD",""],["INSULATION",""],["MEMBRANE",""],["SLEEVING",""],["WRAPPING",""],["USERDEFINED","DRIVEWAYPARALLEL"],["USERDEFINED","DRIVEWAY45"],["USERDEFINED","DRIVEWAY60"],["USERDEFINED","DRIVEWAY75"],["USERDEFINED","DRIVEWAY90ONEWAY"],["USERDEFINED","DRIVEWAY90TWOWAY"],["USERDEFINED","GRASS"],["USERDEFINED","PLASTER"]],"attrs":[["Qto_CoveringBaseQuantities","Width","Width","double","2","010"],["Qto_CoveringBaseQuantities","GrossArea","GrossArea","double","3","010"],["Pset_CoveringCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_CoveringCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_CoveringCommon","Finish","Finish","string","Carpet","010"],["Pset_CoveringCommon","FireRating","FireRating","int","120","010"],["Pset_CoveringCommon","FlammabilityRating","FlammabilityRating","double","40","010"],["Pset_CoveringCommon","FragilityRating","FragilityRating","double","30","010"],["Pset_CoveringCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_CoveringCommon","Status","Status","string","Existing, New","010"],["Pset_CoveringCommon","SurfaceSpreadOfFlame","SurfaceSpreadOfFlame","double","4","010"],["Pset_CoveringCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","Recyclable","Recyclable","bool","","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Curtain Wall","type":"IfcCurtainWall","subs":[["NOTFOUND","CURTAINWALL"]],"attrs":[["Qto_CurtainWallBaseQuantities","Length","Length","double","2","010"],["Qto_CurtainWallBaseQuantities","Width","Width","double","2","010"],["Qto_CurtainWallBaseQuantities","Height","Height","double","2","010"],["Qto_CurtainWallBaseQuantities","GrossSideArea","GrossSideArea","double","2","010"],["Qto_CurtainWallBaseQuantities","NetSideArea","NetSideArea","double","15","010"],["Qto_CurtainWallBaseQuantities","Area","Area","double","40","010"],["Pset_CurtainWallCommon","Status","Status","string","New, Existing","010"],["Pset_CurtainWallCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_CurtainWallCommon","FireRating","FireRating","int","120","010"],["Pset_CurtainWallCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_CurtainWallCommon","AcousticRating","AcousticRating","string","0.04","010"],["Pset_CurtainWallCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_CurtainWallCommon","SurfaceSpreadOfFlame","SurfaceSpreadOfFlame","double","25","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","0.8","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Glass","010"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Door","type":"IfcDoor","subs":[["DOOR",""],["GATE",""],["TRAPDOOR",""],["USERDEFINED","ELEVATORDOOR"],["USERDEFINED","BALCONYDOOR"],["USERDEFINED","GARBAGEROOMDOOR"],["USERDEFINED","ENTRYDOOR"],["USERDEFINED","GENERALDOOR"],["USERDEFINED","BATHROOMDOOR"],["USERDEFINED","TOILETDOOR"],["USERDEFINED","EXITDOOR"],["USERDEFINED","EXITACCESSDOOR"],["USERDEFINED","DOUBLEGARAGEDOOR"],["USERDEFINED","SINGLEGARAGEDOOR"],["USERDEFINED","MAINENTRANCEDOOR"],["USERDEFINED","SERVICEDOOR"]],"attrs":[["Qto_DoorBaseQuantities","Width","Width","double","2","010"],["Qto_DoorBaseQuantities","Height","Height","double","2","010"],["Qto_DoorBaseQuantities","Area","Area","double","3","010"],["Qto_DoorBaseQuantities","Perimeter","Perimeter","double","6","010"],["Pset_DoorCommon","Status","Status","string","Existing, New","010"],["Pset_DoorCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_DoorCommon","FireRating","FireRating","int","60","010"],["Pset_DoorCommon","SelfClosing","SelfClosing","bool","YES/NO","010"],["Pset_DoorCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_DoorCommon","HasDrive","HasDrive","bool","YES/NO","010"],["Building Permit","HasDrive","HasDrive","bool","YES/NO","010"],["Pset_DoorCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","SelfClosing","SelfClosing","bool","YES/NO","010"],["Pset_DoorCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_DoorCommon","SecurityRating","SecurityRating","string","0.1","010"],["Pset_DoorCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_DoorCommon","SmokeStop","SmokeStop","bool","YES/NO","010"],["Building Permit","IsEntrance","IsEntrance","bool","YES/NO","010"],["Building Permit","SelfLatching","SelfLatching","bool","YES/NO","010"],["Building Permit","SelfLocking","SelfLocking","bool","YES/NO","010"],["Building Permit","HardwareHeight","HardwareHeight","double","1.3","010"],["Building Permit","HasVisionPanel","HasVisionPanel","bool","YES/NO","010"],["Building Permit","DoorClearWidth","DoorClearWidth","double","0.9","010"],["Building Permit","Operation","Operation","string","Outside/ Inside","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Wood","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","100","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","Recyclable","Recyclable","bool","","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"ElementAssembly","type":"IfcElementAssembly","subs":[["ACCESSORY_ASSEMBLY",""],["ARCH",""],["BEAM_GRID",""],["BRACED_FRAME",""],["GIRDER",""],["REINFORCEMENT_UNIT",""],["RIGID_FRAME",""],["SLAB_FIELD",""],["TRUSS",""],["ABUTMENT",""],["PIER",""],["PYLON",""],["CROSS_BRACING",""],["DECK",""],["USERDEFINED","LADDER"]],"attrs":[["Building Permit","Length","Length","double","5","000"],["Building Permit","Height","Height","double","6","000"],["Building Permit","Depth","Depth","double","2","000"],["Building Permit","Description","Description","string","","010"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Floor (Slabs)","type":"IfcSlab","subs":[["FLOOR",""],["ROOF",""],["LANDING",""],["BASESLAB",""],["APPROACH_SLAB",""],["PAVING",""],["WEARING",""],["SIDEWALK",""],["USERDEFINED","GRASS"],["USERDEFINED","ONEWAYINTERNALROAD"],["USERDEFINED","TWOWAYINTERNALROAD"],["USERDEFINED","ONEWAYEXTERNALROAD"],["USERDEFINED","TWOWAYEXTERNALROAD"],["USERDEFINED","ONEWAYTRUCKROAD"],["USERDEFINED","TWOWAYTRUCKROAD"],["USERDEFINED","ACCESSIBLERAMP"]],"attrs":[["Qto_SlabBaseQuantities","Length","Length","double","1","010"],["Qto_SlabBaseQuantities","Width","Width","double","1","010"],["Qto_SlabBaseQuantities","Area","Area","double","3","010"],["Qto_SlabBaseQuantities","Volume","Volume","double","3","010"],["Qto_SlabBaseQuantities","Perimeter","Perimeter","double","6","010"],["Qto_SlabBaseQuantities","Thickness","Depth","double","0.02","010"],["Pset_SlabCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_SlabCommon","Status","Status","string","New, Existing","010"],["Pset_SlabCommon","Fire Compartment","Compartmentation","bool","YES/NO","010"],["Pset_SlabCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_SlabCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_SlabCommon","FireRating","FireRating","int","60","010"],["Pset_SlabCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_SlabCommon","PitchAngle","PitchAngle","double","45","010"],["Pset_SlabCommon","SurfaceSpreadOfFlame","SurfaceSpreadOfFlame","double","4","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Text","000"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","20","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","30","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","Color","Color","string","Grey","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Foundation","type":"IfcFooting","subs":[["CAISSON_FOUNDATION",""],["FOOTING_BEAM",""],["PAD_FOOTING",""],["PILE_CAP",""],["STRIP_FOOTING",""]],"attrs":[["Qto_FootingBaseQuantities","Length","Length","double","10","010"],["Qto_FootingBaseQuantities","Width","Width","double","3","010"],["Qto_FootingBaseQuantities","Height","Height","double","10","010"],["Qto_FootingBaseQuantities","NetVolume","NetVolume","double","10","010"],["Pset_FootingCommon","Status","Status","string","New, Existing","010"],["Pset_Condition","AssessmentDate","AssessmentDate","Date","01/01/2021 12:00:00 AM","000"],["Pset_Condition","AssessmentCondition","AssessmentCondition","string","Good, OK, Poor","000"],["Pset_Condition","AssessmentDescription","AssessmentDescription","string","Text","000"],["Pset_ConcreteElementGeneral","ConstructionMethod","ConstructionMethod","string","In-Situ, Precast","010"],["Pset_ConcreteElementGeneral","StructuralClass","StructuralClass","string","S1","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Member","type":"IfcMember","subs":[["BRACE",""],["CHORD",""],["COLLAR",""],["MEMBER",""],["MULLION",""],["PLATE",""],["POST",""],["PURLIN",""],["RAFTER",""],["STRINGER",""],["STRUT",""],["STUD",""],["STIFFENING_RIB",""],["ARCH_SEGMENT",""],["SUSPENSION_CABLE",""],["SUSPENDER",""],["STAY_CABLE",""]],"attrs":[["Pset_MemberCommon","Span","Span","double","5","010"],["Pset_MemberCommon","Slope","Slope","double","2","010"],["Pset_MemberCommon","Roll","Roll","double","","010"],["Pset_MemberCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_MemberCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_MemberCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_MemberCommon","FireRating","FireRating","int","120","010"],["Pset_MemberCommon","Status","Status","string","New, Existing","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Pset_PrecastConcreteElementGeneral","TypeDesignator","TypeDesignator","string","","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Parking (Spaces)","type":"IfcSpace","subs":[["PARKING",""],["PARKING","PARALLEL"],["PARKING","90DEGREE"],["PARKING","45DEGREE"],["PARKING","60DEGREE"],["PARKING","75DEGREE"],["PARKING","LOADINGTRUCK12M"],["PARKING","LOADINGTRUCK15M"],["PARKING","LOADINGTRUCK9M"]],"attrs":[["Pset_SpaceCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_SpaceCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","ParkingUse","ParkingUse","string","BUS","010"],["Building Permit","E-Charging","E-Charging","bool","YES/NO","010"],["Building Permit","ParkingUnits","ParkingUnits","string","10 Units","010"],["Building Permit","IsAisle","IsAisle","bool","YES/NO","010"],["Building Permit","HasWheelStop","HasWheelStop","bool","YES/NO","010"]]},{"name":"Pile","type":"IfcPile","subs":[["BORED",""],["DRIVEN",""],["JETGROUTING",""],["COHESION",""],["FRICTION",""],["SUPPORT",""]],"attrs":[["Pset_PileCommon","Status","Status","string","New, Existing","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","20","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","10","010"],["Pset_PrecastConcreteElementGeneral","TypeDesignator","TypeDesignator","string","CastInSitu","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCode","MaterialPassportCode","string","","000"]]},{"name":"Plate","type":"IfcPlate","subs":[["CURTAIN_PANEL",""],["SHEET",""],["FLANGE_PLATE",""],["WEB_PLATE",""],["STIFFENER_PLATE",""],["GUSSET_PLATE",""],["COVER_PLATE",""],["SPLICE_PLATE",""],["BASE_PLATE",""]],"attrs":[["Pset_PlateCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_PlateCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_PlateCommon","FireRating","FireRating","int","60","010"],["Pset_PlateCommon","Status","Status","string","New, Existing","010"],["Pset_PlateCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_PlateCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Pset_PrecastConcreteElementGeneral","TypeDesignator","TypeDesignator","string","","010"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Railing","type":"IfcRailing","subs":[["HANDRAIL",""],["GUARDRAIL",""],["BALUSTRADE",""],["USERDEFINED","STAIRWAYRAILING"],["USERDEFINED","BALCONYRAILING"],["USERDEFINED","RAMPRAILING"],["USERDEFINED","PLOTFENCE"]],"attrs":[["Qto_RailingBaseQuantities","Length","Length","double","3","010"],["Pset_RailingCommon","Height","Height","double","12","010"],["Pset_RailingCommon","Status","Status","string","New, Existing","010"],["Pset_RailingCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]},{"name":"Ramp","type":"IfcRamp","subs":[["STRAIGHT",""],["SPIRAL",""],["USERDEFINED","ACCESSIBLERAMP"],["USERDEFINED","CURBRAMP"],["USERDEFINED","SERVICERAMP"],["USERDEFINED","SINGLELANERAMP"],["USERDEFINED","DOUBLELANERAMP"]],"attrs":[["Pset_RampCommon","Status","Status","string","New, Existing","010"],["Pset_RampCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_RampCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_RampCommon","RequiredSlope","RequiredSlope","double","2","010"],["Pset_RampCommon","FireRating","FireRating","int","60","010"],["Pset_RampCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"]]},{"name":"Ramp Flight","type":"IfcRampFlight","subs":[["STRAIGHT",""],["SPIRAL",""],["USERDEFINED","ACCESSIBLERAMP"],["USERDEFINED","CURBRAMP"],["USERDEFINED","SERVICERAMP"],["USERDEFINED","SINGLELANERAMP"],["USERDEFINED","DOUBLELANERAMP"]],"attrs":[["Qto_RampFlightBaseQuantities","Length","Length","double","1","010"],["Qto_RampFlightBaseQuantities","Width","Width","double","2","010"],["Qto_RampFlightBaseQuantities","Area","Area","double","3","010"],["Qto_RampFlightBaseQuantities","Volume","Volume","double","1","010"],["Pset_RampFlightCommon","Slope","Slope","double","2","010"]]},{"name":"Roof","type":"IfcRoof","subs":[["FLAT_ROOF",""],["SHED_ROOF",""],["GABLE_ROOF",""],["HIP_ROOF",""],["HIPPED_GABLE_ROOF",""],["GAMBREL_ROOF",""],["MANSARD_ROOF",""],["BARREL_ROOF",""],["RAINBOW_ROOF",""],["BUTTERFLY_ROOF",""],["PAVILION_ROOF",""],["DOME_ROOF",""],["FREEFORM",""],["USERDEFINED","PERGOLA"],["USERDEFINED","CANOPY"]],"attrs":[["Qto_RoofBaseQuantities","Area","Area","double","3","010"],["Pset_RoofCommon","Status","Status","string","New, Existing","010"],["Pset_RoofCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_RoofCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_RoofCommon","FireRating","FireRating","int","120","010"],["Pset_RoofCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","PitchAngle","PitchAngle","double","31","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gupsum ","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","IsAccessible","IsAccessible","bool","YES/NO","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Room (Spaces)","type":"IfcSpace","subs":[["SPACE",""],["GFA",""],["INTERNAL",""],["EXTERNAL",""],["USERDEFINED","SINGLELOADEDCORRIDOR"],["USERDEFINED","DOUBLELOADEDCORRIDOR"],["USERDEFINED","STALLDOORINSIDE"],["USERDEFINED","STALLDOOROUTSIDE"],["USERDEFINED","ELEVATORSGROUPLINE"],["USERDEFINED","ELEVATORSGROUPFACING"],["USERDEFINED","SINGLEOPENGRAGE"],["USERDEFINED","DOUBLEENCLOSEDGARAGE"],["USERDEFINED","ROOMUNDERSTAIR"],["USERDEFINED","ENTRANCE"],["USERDEFINED","CLOSEDAREAKIOSK"],["USERDEFINED","OPENMALLKIOSK"]],"attrs":[["Qto_SpaceBaseQuantities","Height","Height","double","2","010"],["Qto_SpaceBaseQuantities","Area","Area","double","3","010"],["Qto_SpaceBaseQuantities","Volume","Volume","double","3","010"],["Qto_SpaceBaseQuantities","Perimeter","Perimeter","double","10","010"],["Pset_SpaceCommon","PubliclyAccessible","PubliclyAccessible","bool","YES/NO","010"],["Building Permit","PubliclyAccessible","PubliclyAccessible","bool","YES/NO","010"],["Pset_SpaceCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_SpaceCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","SprinklerProtection","SprinklerProtection","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","IsCovered","IsCovered","bool","YES/NO","010"],["Building Permit","IsLightWeightCovering","IsLightWeightCovering","bool","YES/NO","010"],["Building Permit","IsHabitableSpace","IsHabitableSpace","bool","YES/NO","010"],["Building Permit","IsOccupiedSpace","IsOccupiedSpace","bool","YES/NO","010"],["Building Permit","IsCirculationSpace","IsCirculationSpace","bool","YES/NO","010"],["Building Permit","IsCommonFacility","IsCommonFacility","bool","YES/NO","010"],["Building Permit","SpaceUsageCode","SpaceUsageCode","string","SC_25_15_10","010"],["Building Permit","SpaceUsageDescription","SpaceUsageDescription","string","Living Room","010"],["Building Permit","UnitNo","UnitNo","string","1","000"],["Building Permit","UnitUsageCode","UnitUsageCode","string","RE_01","000"],["Building Permit","UnitUsageDescription","UnitUsageDescription","string","villa","000"],["Building Permit","UnitExtraInfo","UnitExtraInfo","string","[Showers:5],[WCs:2]","000"],["Building Permit","BuildingOccupancyUsageCode","BuildingOccupancyUsageCode","string","PB_04_03","010"],["Building Permit","BuildingOccupancyUsageDescription","BuildingOccupancyUsageDescription","string","Cinema","010"],["Building Permit","ZoneName","ZoneName","string","LU_F1","010"],["Building Permit","ZoneObjectType","ZoneObjectType","string","LivingUnit","010"]]},{"name":"Stair","type":"IfcStair","subs":[["STRAIGHT_RUN_STAIR",""],["TWO_STRAIGHT_RUN_STAIR",""],["QUARTER_WINDING_STAIR",""],["QUARTER_TURN_STAIR",""],["HALF_WINDING_STAIR",""],["HALF_TURN_STAIR",""],["TWO_QUARTER_WINDING_STAIR",""],["TWO_QUARTER_TURN_STAIR",""],["THREE_QUARTER_WINDING_STAIR",""],["THREE_QUARTER_TURN_STAIR",""],["SPIRAL_STAIR",""],["DOUBLE_RETURN_STAIR",""],["CURVED_RUN_STAIR",""],["TWO_CURVED_RUN_STAIR",""],["USERDEFINED","FIREEXITSTAIR"],["USERDEFINED","REGULARSTAIR"],["USERDEFINED","COMMONSTAIR"]],"attrs":[["Pset_StairCommon","Status","Status","string","New, Existing","010"],["Pset_StairCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_StairCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_StairCommon","NumberOfRiser","NumberOfRiser","double","15","010"],["Pset_StairCommon","NumberOfTreads","NumberOfTreads","double","15","010"],["Pset_StairCommon","RiserHeight","RiserHeight","double","2","010"],["Pset_StairCommon","TreadLength","TreadLength","double","2","010"],["Pset_StairCommon","NosingLength","NosingLength","double","0.02","010"],["Pset_StairCommon","WaistThickness","WaistThickness","double","0.05","010"],["Pset_StairCommon","FireRating","FireRating","int","120","010"],["Pset_StairCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Pset_StairCommon","HasNonSkidSurface","HasNonSkidSurface","bool","YES/NO","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","IsSlipResistant","IsSlipResistant","bool","YES/NO","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"StairFlight","type":"IfcStairFlight","subs":[["STRAIGHT",""],["WINDER",""],["SPIRAL",""],["CURVED",""],["FREEFORM",""],["USERDEFINED","FIREEXITSTAIR"],["USERDEFINED","REGULARSTAIR"],["USERDEFINED","COMMONSTAIR"]],"attrs":[["Pset_StairFlightCommon","Staus","Staus","string","New, Existing","010"],["Pset_StairFlightCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_StairFlightCommon","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Building Permit","HandicapAccessible","HandicapAccessible","bool","YES/NO","010"],["Pset_StairFlightCommon","NumberOfRiser","NumberOfRiser","double","15","010"],["Pset_StairFlightCommon","NumberOfTreads","NumberOfTreads","double","15","010"],["Pset_StairFlightCommon","RiserHeight","RiserHeight","double","2","010"],["Pset_StairFlightCommon","TreadLength","TreadLength","double","2","010"],["Pset_StairFlightCommon","NosingLength","NosingLength","double","0.02","010"],["Pset_StairFlightCommon","WaistThickness","WaistThickness","double","0.05","010"],["Pset_ConcreteElementGeneral","StrengthClass","StrengthClass","string","C14","010"],["Pset_ConcreteElementGeneral","ReinforcementVolumeRatio","ReinforcementVolumeRatio","double","1","010"],["Pset_ConcreteElementGeneral","ReinforcementAreaRatio","ReinforcementAreaRatio","double","1","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","IsSlipResistant","IsSlipResistant","bool","YES/NO","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Gypsum","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","0.2","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","0.5","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Transport Element","type":"IfcTransportElement","subs":[["ELEVATOR",""],["ESCALATOR",""],["MOVINGWALKWAY",""],["CRANEWAY",""],["LIFTINGGEAR",""],["USERDEFINED","PASSENGER"],["USERDEFINED","SERVICE"],["USERDEFINED","FIRE"]],"attrs":[["Pset_TransportElementCommon","Status","Status","string","New, Existing","010"],["Pset_TransportElementCommon","CapacityPeople","CapacityPeople","double","200","010"],["Pset_TransportElementCommon","CapacityWeight","CapacityWeight","double","20000","010"],["Pset_TransportElementCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"]]},{"name":"Wall","type":"IfcWall","subs":[["MOVABLE",""],["PARAPET",""],["PARTITIONING",""],["PLUMBINGWALL",""],["SHEAR",""],["SOLIDWALL",""],["STANDARD",""],["POLYGONAL",""],["ELEMENTEDWALL",""],["RETAININGWALL",""],["USERDEFINED","FACADEWALL"],["USERDEFINED","BASEMENTWALL"],["USERDEFINED","PARAPETWALL"],["USERDEFINED","CURTAINWALL"],["USERDEFINED","SHAFTWALL"],["USERDEFINED","PLANTERWALL"]],"attrs":[["Qto_WallBaseQuantities","Length","Length","double","1","010"],["Qto_WallBaseQuantities","Width","Width","double","1","010"],["Qto_WallBaseQuantities","Hight","Hight","double","3","010"],["Qto_WallBaseQuantities","Volume","Volume","double","3","010"],["Qto_WallBaseQuantities","Area","Area","double","3","010"],["Pset_WallCommon","Status","Status","string","Existing, New","010"],["Pset_WallCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_WallCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_WallCommon","FireRating","FireRating","int","120","010"],["Building Permit","FireRating","FireRating","int","120","010"],["Pset_WallCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_WallCommon","Combustible","Combustible","bool","YES/NO","010"],["Pset_WallCommon","LoadBearing","LoadBearing","bool","YES/NO","010"],["Building Permit","LoadBearing","LoadBearing","bool","YES/NO","010"],["Pset_WallCommon","Compartmentation","Compartmentation","bool","YES/NO","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","30","010"],["Building Permit","CompressiveStrength","CompressiveStrength","double","30","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Concrete","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","30","010"],["Building Permit","RecycledConcreteRatio","RecycledConcreteRatio","double","Number (0..1)","000"],["Building Permit","RecycledSteelRatio","RecycledSteelRatio","double","Number (0..1)","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCode","string","","000"]]},{"name":"Waste Terminal","type":"IfcWasteTerminal","subs":[["USERDEFINED","GARBAGEBIN"]],"attrs":[["Pset_WasteTerminalTypeCommon","Status","Status","string","New, Existing","010"]]},{"name":"Water Tank","type":"IfcTank","subs":[["BASIN",""],["BREAKPRESSURE",""],["EXPANSION",""],["FEEDANDEXPANSION",""],["PRESSUREVESSEL",""],["STORAGE",""],["VESSEL",""],["USERDEFINED","COLDWATERTANK"],["USERDEFINED","HOTWATERTANK"]],"attrs":[["Pset_TankTypeCommon","Status","Status","string","New, Existing","010"],["Pset_TankTypeCommon","StorageType","StorageType","string","underground","010"],["Pset_TankOccurrence","HasLadder","HasLadder","bool","YES/NO","010"]]},{"name":"Window","type":"IfcWindow","subs":[["WINDOW",""],["SKYLIGHT",""],["LIGHTDOME",""],["USERDEFINED","SLIDING"],["USERDEFINED","OPENABLE"]],"attrs":[["Qto_WindowBaseQuantities","Width","Width","double","7","010"],["Qto_WindowBaseQuantities","Area","Area","double","3","010"],["Qto_WindowBaseQuantities","Perimeter","Perimeter","double","6","010"],["Pset_WindowCommon","Status","Status","string","Existing, New","010"],["Pset_WindowCommon","IsExternal","IsExternal","bool","YES/NO","010"],["Building Permit","IsExternal","IsExternal","bool","YES/NO","010"],["Pset_WindowCommon","ThermalTransmittance","ThermalTransmittance","double","5.7","010"],["Pset_WindowCommon","GlazedAreaFraction","GlazedAreaFraction","double","30","010"],["Pset_WindowCommon","AcousticRating","AcousticRating","string","0.05","010"],["Pset_WindowCommon","FireRating","FireRating","int","120","010"],["Pset_WindowCommon","HasSillExternal","HasSillExternal","bool","YES/NO","010"],["Pset_WindowCommon","HasSillInternal","HasSillInternal","bool","YES/NO","010"],["Pset_WindowCommon","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","FireExit","FireExit","bool","YES/NO","010"],["Building Permit","LightReflectanceValue","LightReflectanceValue","double","50","010"],["Building Permit","SolarReflectanceIndex","SolarReflectanceIndex","double","36","010"],["Building Permit","Color","Color","string","White","010"],["Building Permit","Operation","Operation","string","Sliding/Openable/fixed","010"],["Building Permit","Sill Height","Sill Height","double","0.9","010"],["Building Permit","IfcMaterial","IfcMaterial","string","Aluminum","010"],["Building Permit","Recyclable","Recyclable","bool","","000"],["Building Permit","RecycledAluminium Ratio","RecycledAluminium Ratio","double","0.3","000"],["Building Permit","MaterialPassportCodes","MaterialPassportCodes","string","","000"]]}]}]}</script>
+<script id="sample-ifc" type="text/plain">ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Properties-only example for the DM IFC checker'),'2;1');
+FILE_NAME('example-villa.ifc','2026-01-01T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0DMexample000000000001',$,'Example villa',$,$,$,$,$,$);
+#2=IFCPROPERTYSINGLEVALUE('ConstructionMode',$,IFCLABEL('New construction'),$);
+#3=IFCPROPERTYSET('0DMexample000000000002',$,'Pset_ProjectCommon',$,(#2));
+#4=IFCRELDEFINESBYPROPERTIES('0DMexample000000000003',$,$,$,(#1),#3);
+#5=IFCPROPERTYSINGLEVALUE('ParcelId',$,IFCREAL(1.5),$);
+#6=IFCPROPERTYSINGLEVALUE('BIMStandardVersion',$,IFCLABEL('1.3'),$);
+#7=IFCPROPERTYSET('0DMexample000000000004',$,'Building Permit',$,(#5,#6));
+#8=IFCRELDEFINESBYPROPERTIES('0DMexample000000000005',$,$,$,(#1),#7);
+#9=IFCSITE('0DMexample000000000006',$,'Plot',$,$,$,$,$,.ELEMENT.,$,$,$,$,$);
+#10=IFCPROPERTYSINGLEVALUE('GateLevel',$,IFCREAL(1.5),$);
+#11=IFCPROPERTYSET('0DMexample000000000007',$,'Building Permit',$,(#10));
+#12=IFCRELDEFINESBYPROPERTIES('0DMexample000000000008',$,$,$,(#9),#11);
+#13=IFCPOSTALADDRESS($,$,$,$,('Al Example Street'),$,'Dubai',$,$,'UAE');
+#14=IFCBUILDING('0DMexample000000000009',$,'Villa','G+1 villa',$,$,$,'1',.ELEMENT.,$,$,#13);
+#15=IFCPROPERTYSINGLEVALUE('ConstructionMethod',$,IFCLABEL('Sample'),$);
+#16=IFCPROPERTYSINGLEVALUE('FireProtectionClass',$,$,$);
+#17=IFCPROPERTYSINGLEVALUE('SprinklerProtection',$,IFCBOOLEAN(.T.),$);
+#18=IFCPROPERTYSINGLEVALUE('YearOfConstruction',$,IFCREAL(1.5),$);
+#19=IFCPROPERTYSINGLEVALUE('IsLandmarked',$,IFCBOOLEAN(.T.),$);
+#20=IFCPROPERTYSET('0DMexample000000000010',$,'Pset_BuildingCommon',$,(#15,#16,#17,#18,#19));
+#21=IFCRELDEFINESBYPROPERTIES('0DMexample000000000011',$,$,$,(#14),#20);
+#22=IFCQUANTITYLENGTH('Height',$,$,1.5,$);
+#23=IFCELEMENTQUANTITY('0DMexample000000000012',$,'Qto_BuildingBaseQuantities',$,$,(#22));
+#24=IFCRELDEFINESBYPROPERTIES('0DMexample000000000013',$,$,$,(#14),#23);
+#25=IFCPROPERTYSINGLEVALUE('BuildingNum',$,IFCREAL(1.5),$);
+#26=IFCPROPERTYSINGLEVALUE('Occupancy',$,IFCLABEL('RESIDENTIAL'),$);
+#27=IFCPROPERTYSINGLEVALUE('OccupancyUse',$,IFCLABEL('residential apartments'),$);
+#28=IFCPROPERTYSINGLEVALUE('TotalBuildupArea',$,IFCREAL(1.5),$);
+#29=IFCPROPERTYSINGLEVALUE('TotalGrossArea',$,IFCREAL(1.5),$);
+#30=IFCPROPERTYSINGLEVALUE('TotalFloorGrossArea',$,IFCREAL(1.5),$);
+#31=IFCPROPERTYSINGLEVALUE('TotalNetArea',$,IFCREAL(1.5),$);
+#32=IFCPROPERTYSINGLEVALUE('RecycledConcreteVolume',$,IFCREAL(1.5),$);
+#33=IFCPROPERTYSINGLEVALUE('RecycledSteelWeight',$,IFCREAL(1.5),$);
+#34=IFCPROPERTYSINGLEVALUE('RecycledAluminiumWeight',$,IFCREAL(1.5),$);
+#35=IFCPROPERTYSINGLEVALUE('RecycledGypsumWeight',$,IFCREAL(1.5),$);
+#36=IFCPROPERTYSET('0DMexample000000000014',$,'Building Permit',$,(#25,#26,#27,#28,#29,#30,#31,#32,#33,#34,#35));
+#37=IFCRELDEFINESBYPROPERTIES('0DMexample000000000015',$,$,$,(#14),#36);
+#38=IFCBUILDINGSTOREY('0DMexample000000000016',$,'Ground Floor',$,$,$,$,$,.ELEMENT.,0.0);
+#39=IFCQUANTITYLENGTH('GrossHeight',$,$,1.5,$);
+#40=IFCQUANTITYLENGTH('NetHeigtht',$,$,1.5,$);
+#41=IFCELEMENTQUANTITY('0DMexample000000000017',$,'Qto_BuildingStoreyBaseQuantities',$,$,(#39,#40));
+#42=IFCRELDEFINESBYPROPERTIES('0DMexample000000000018',$,$,$,(#38),#41);
+#43=IFCPROPERTYSINGLEVALUE('TotalBuildupArea',$,IFCREAL(1.5),$);
+#44=IFCPROPERTYSINGLEVALUE('TotalGrossArea',$,IFCREAL(1.5),$);
+#45=IFCPROPERTYSINGLEVALUE('TotalFloorGrossArea',$,IFCREAL(1.5),$);
+#46=IFCPROPERTYSINGLEVALUE('TotalNetArea',$,IFCREAL(1.5),$);
+#47=IFCPROPERTYSINGLEVALUE('BuildingPartNum',$,IFCREAL(1.5),$);
+#48=IFCPROPERTYSET('0DMexample000000000019',$,'Building Permit',$,(#43,#44,#45,#46,#47));
+#49=IFCRELDEFINESBYPROPERTIES('0DMexample000000000020',$,$,$,(#38),#48);
+#50=IFCBUILDINGSTOREY('0DMexample000000000021',$,'First Floor',$,$,$,$,$,.ELEMENT.,3.6);
+#51=IFCQUANTITYLENGTH('GrossHeight',$,$,1.5,$);
+#52=IFCQUANTITYLENGTH('NetHeigtht',$,$,1.5,$);
+#53=IFCELEMENTQUANTITY('0DMexample000000000022',$,'Qto_BuildingStoreyBaseQuantities',$,$,(#51,#52));
+#54=IFCRELDEFINESBYPROPERTIES('0DMexample000000000023',$,$,$,(#50),#53);
+#55=IFCPROPERTYSINGLEVALUE('TotalBuildupArea',$,IFCREAL(1.5),$);
+#56=IFCPROPERTYSINGLEVALUE('TotalGrossArea',$,IFCREAL(1.5),$);
+#57=IFCPROPERTYSINGLEVALUE('TotalFloorGrossArea',$,IFCREAL(1.5),$);
+#58=IFCPROPERTYSINGLEVALUE('BuildingPartNum',$,IFCREAL(1.5),$);
+#59=IFCPROPERTYSET('0DMexample000000000024',$,'Building Permit',$,(#55,#56,#57,#58));
+#60=IFCRELDEFINESBYPROPERTIES('0DMexample000000000025',$,$,$,(#50),#59);
+#61=IFCRELAGGREGATES('0DMexample000000000026',$,$,$,#1,(#9));
+#62=IFCRELAGGREGATES('0DMexample000000000027',$,$,$,#9,(#14));
+#63=IFCRELAGGREGATES('0DMexample000000000028',$,$,$,#14,(#38,#50));
+#64=IFCWALL('0DMexample000000000029',$,'Basic Wall:Ext 250 Block',$,$,$,$,'348101',.SOLIDWALL.);
+#65=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#66=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#67=IFCQUANTITYLENGTH('Hight',$,$,1.5,$);
+#68=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#69=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#70=IFCELEMENTQUANTITY('0DMexample000000000030',$,'Qto_WallBaseQuantities',$,$,(#65,#66,#67,#68,#69));
+#71=IFCRELDEFINESBYPROPERTIES('0DMexample000000000031',$,$,$,(#64),#70);
+#72=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#73=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#74=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#75=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#76=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#77=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#78=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#79=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#80=IFCPROPERTYSET('0DMexample000000000032',$,'Pset_WallCommon',$,(#72,#73,#74,#75,#76,#77,#78,#79));
+#81=IFCRELDEFINESBYPROPERTIES('0DMexample000000000033',$,$,$,(#64),#80);
+#82=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#83=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#84=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#85=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#86=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#87=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#88=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#89=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#90=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#91=IFCPROPERTYSINGLEVALUE('MaterialPassportCode',$,IFCLABEL('Sample'),$);
+#92=IFCPROPERTYSET('0DMexample000000000034',$,'Building Permit',$,(#82,#83,#84,#85,#86,#87,#88,#89,#90,#91));
+#93=IFCRELDEFINESBYPROPERTIES('0DMexample000000000035',$,$,$,(#64),#92);
+#94=IFCWALL('0DMexample000000000036',$,'Basic Wall:Ext 250 Block',$,$,$,$,'348102',.SOLIDWALL.);
+#95=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#96=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#97=IFCQUANTITYLENGTH('Hight',$,$,1.5,$);
+#98=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#99=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#100=IFCELEMENTQUANTITY('0DMexample000000000037',$,'Qto_WallBaseQuantities',$,$,(#95,#96,#97,#98,#99));
+#101=IFCRELDEFINESBYPROPERTIES('0DMexample000000000038',$,$,$,(#94),#100);
+#102=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#103=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#104=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#105=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#106=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#107=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#108=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#109=IFCPROPERTYSET('0DMexample000000000039',$,'Pset_WallCommon',$,(#102,#103,#104,#105,#106,#107,#108));
+#110=IFCRELDEFINESBYPROPERTIES('0DMexample000000000040',$,$,$,(#94),#109);
+#111=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#112=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#113=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#114=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#115=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#116=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#117=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#118=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#119=IFCPROPERTYSINGLEVALUE('MaterialPassportCode',$,IFCLABEL('Sample'),$);
+#120=IFCPROPERTYSET('0DMexample000000000041',$,'Building Permit',$,(#111,#112,#113,#114,#115,#116,#117,#118,#119));
+#121=IFCRELDEFINESBYPROPERTIES('0DMexample000000000042',$,$,$,(#94),#120);
+#122=IFCWALL('0DMexample000000000043',$,'Basic Wall:Int 150 Block',$,$,$,$,'348103',.PARTITIONING.);
+#123=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#124=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#125=IFCQUANTITYLENGTH('Hight',$,$,1.5,$);
+#126=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#127=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#128=IFCELEMENTQUANTITY('0DMexample000000000044',$,'Qto_WallBaseQuantities',$,$,(#123,#124,#125,#126,#127));
+#129=IFCRELDEFINESBYPROPERTIES('0DMexample000000000045',$,$,$,(#122),#128);
+#130=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#131=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#132=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCLABEL('2 hours'),$);
+#133=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#134=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#135=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#136=IFCPROPERTYSET('0DMexample000000000046',$,'Pset_WallCommon',$,(#130,#131,#132,#133,#134,#135));
+#137=IFCRELDEFINESBYPROPERTIES('0DMexample000000000047',$,$,$,(#122),#136);
+#138=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#139=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#140=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#141=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#142=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#143=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#144=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#145=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#146=IFCPROPERTYSINGLEVALUE('MaterialPassportCode',$,IFCLABEL('Sample'),$);
+#147=IFCPROPERTYSET('0DMexample000000000048',$,'Building Permit',$,(#138,#139,#140,#141,#142,#143,#144,#145,#146));
+#148=IFCRELDEFINESBYPROPERTIES('0DMexample000000000049',$,$,$,(#122),#147);
+#149=IFCWALL('0DMexample000000000050',$,'Basic Wall:Int 150 Block',$,$,$,$,'348104',.PARTITIONING.);
+#150=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#151=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#152=IFCQUANTITYLENGTH('Hight',$,$,1.5,$);
+#153=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#154=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#155=IFCELEMENTQUANTITY('0DMexample000000000051',$,'Qto_WallBaseQuantities',$,$,(#150,#151,#152,#153,#154));
+#156=IFCRELDEFINESBYPROPERTIES('0DMexample000000000052',$,$,$,(#149),#155);
+#157=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#158=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#159=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#160=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#161=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#162=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#163=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#164=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#165=IFCPROPERTYSET('0DMexample000000000053',$,'Pset_WallCommon',$,(#157,#158,#159,#160,#161,#162,#163,#164));
+#166=IFCRELDEFINESBYPROPERTIES('0DMexample000000000054',$,$,$,(#149),#165);
+#167=IFCWALL('0DMexample000000000055',$,'Basic Wall:Parapet 200',$,$,$,$,'348105',.PARAPET.);
+#168=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#169=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#170=IFCQUANTITYLENGTH('Hight',$,$,1.5,$);
+#171=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#172=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#173=IFCELEMENTQUANTITY('0DMexample000000000056',$,'Qto_WallBaseQuantities',$,$,(#168,#169,#170,#171,#172));
+#174=IFCRELDEFINESBYPROPERTIES('0DMexample000000000057',$,$,$,(#167),#173);
+#175=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#176=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#177=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#178=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#179=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#180=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#181=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#182=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#183=IFCPROPERTYSET('0DMexample000000000058',$,'Pset_WallCommon',$,(#175,#176,#177,#178,#179,#180,#181,#182));
+#184=IFCRELDEFINESBYPROPERTIES('0DMexample000000000059',$,$,$,(#167),#183);
+#185=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#186=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#187=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#188=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#189=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#190=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#191=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#192=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#193=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#194=IFCPROPERTYSINGLEVALUE('MaterialPassportCode',$,IFCLABEL('Sample'),$);
+#195=IFCPROPERTYSET('0DMexample000000000060',$,'Building Permit',$,(#185,#186,#187,#188,#189,#190,#191,#192,#193,#194));
+#196=IFCRELDEFINESBYPROPERTIES('0DMexample000000000061',$,$,$,(#167),#195);
+#197=IFCWALLSTANDARDCASE('0DMexample000000000062',$,'Basic Wall:Garden wall',$,'GARDENWALL',$,$,'348106',.USERDEFINED.);
+#198=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#199=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#200=IFCQUANTITYLENGTH('Hight',$,$,1.5,$);
+#201=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#202=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#203=IFCELEMENTQUANTITY('0DMexample000000000063',$,'Qto_WallBaseQuantities',$,$,(#198,#199,#200,#201,#202));
+#204=IFCRELDEFINESBYPROPERTIES('0DMexample000000000064',$,$,$,(#197),#203);
+#205=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#206=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#207=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#208=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#209=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#210=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#211=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#212=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#213=IFCPROPERTYSET('0DMexample000000000065',$,'Pset_WallCommon',$,(#205,#206,#207,#208,#209,#210,#211,#212));
+#214=IFCRELDEFINESBYPROPERTIES('0DMexample000000000066',$,$,$,(#197),#213);
+#215=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#216=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#217=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#218=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#219=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#220=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#221=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#222=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#223=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#224=IFCPROPERTYSINGLEVALUE('MaterialPassportCode',$,IFCLABEL('Sample'),$);
+#225=IFCPROPERTYSET('0DMexample000000000067',$,'Building Permit',$,(#215,#216,#217,#218,#219,#220,#221,#222,#223,#224));
+#226=IFCRELDEFINESBYPROPERTIES('0DMexample000000000068',$,$,$,(#197),#225);
+#227=IFCDOOR('0DMexample000000000069',$,'Single-Flush:900x2100',$,'MAINENTRANCEDOOR',$,$,'348107',2.1,0.9,.USERDEFINED.,$,$);
+#228=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#229=IFCQUANTITYLENGTH('Height',$,$,1.5,$);
+#230=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#231=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#232=IFCELEMENTQUANTITY('0DMexample000000000070',$,'Qto_DoorBaseQuantities',$,$,(#228,#229,#230,#231));
+#233=IFCRELDEFINESBYPROPERTIES('0DMexample000000000071',$,$,$,(#227),#232);
+#234=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#235=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#236=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#237=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#238=IFCPROPERTYSINGLEVALUE('HandicapAccessible',$,IFCBOOLEAN(.T.),$);
+#239=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#240=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#241=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#242=IFCPROPERTYSINGLEVALUE('SecurityRating',$,IFCLABEL('0.1'),$);
+#243=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#244=IFCPROPERTYSINGLEVALUE('SmokeStop',$,IFCBOOLEAN(.T.),$);
+#245=IFCPROPERTYSET('0DMexample000000000072',$,'Pset_DoorCommon',$,(#234,#235,#236,#237,#238,#239,#240,#241,#242,#243,#244));
+#246=IFCRELDEFINESBYPROPERTIES('0DMexample000000000073',$,$,$,(#227),#245);
+#247=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#248=IFCPROPERTYSINGLEVALUE('HandicapAccessible',$,IFCBOOLEAN(.T.),$);
+#249=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#250=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#251=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#252=IFCPROPERTYSINGLEVALUE('IsEntrance',$,IFCBOOLEAN(.T.),$);
+#253=IFCPROPERTYSINGLEVALUE('SelfLatching',$,IFCBOOLEAN(.T.),$);
+#254=IFCPROPERTYSINGLEVALUE('SelfLocking',$,IFCBOOLEAN(.T.),$);
+#255=IFCPROPERTYSINGLEVALUE('HardwareHeight',$,IFCREAL(1.5),$);
+#256=IFCPROPERTYSINGLEVALUE('HasVisionPanel',$,IFCBOOLEAN(.T.),$);
+#257=IFCPROPERTYSINGLEVALUE('DoorClearWidth',$,IFCREAL(1.5),$);
+#258=IFCPROPERTYSINGLEVALUE('Operation',$,IFCLABEL('Outside/ Inside'),$);
+#259=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Wood'),$);
+#260=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('Grey'),$);
+#261=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#262=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#263=IFCPROPERTYSINGLEVALUE('Recyclable',$,IFCBOOLEAN(.T.),$);
+#264=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#265=IFCPROPERTYSET('0DMexample000000000074',$,'Building Permit',$,(#247,#248,#249,#250,#251,#252,#253,#254,#255,#256,#257,#258,#259,#260,#261,#262,#263,#264));
+#266=IFCRELDEFINESBYPROPERTIES('0DMexample000000000075',$,$,$,(#227),#265);
+#267=IFCDOOR('0DMexample000000000076',$,'Single-Flush:800x2100',$,'BATHROOMDOOR',$,$,'348108',2.1,0.8,.USERDEFINED.,$,$);
+#268=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#269=IFCQUANTITYLENGTH('Height',$,$,1.5,$);
+#270=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#271=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#272=IFCELEMENTQUANTITY('0DMexample000000000077',$,'Qto_DoorBaseQuantities',$,$,(#268,#269,#270,#271));
+#273=IFCRELDEFINESBYPROPERTIES('0DMexample000000000078',$,$,$,(#267),#272);
+#274=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#275=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#276=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#277=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#278=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#279=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#280=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#281=IFCPROPERTYSINGLEVALUE('SecurityRating',$,IFCLABEL('0.1'),$);
+#282=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#283=IFCPROPERTYSINGLEVALUE('SmokeStop',$,IFCBOOLEAN(.T.),$);
+#284=IFCPROPERTYSET('0DMexample000000000079',$,'Pset_DoorCommon',$,(#274,#275,#276,#277,#278,#279,#280,#281,#282,#283));
+#285=IFCRELDEFINESBYPROPERTIES('0DMexample000000000080',$,$,$,(#267),#284);
+#286=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#287=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#288=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#289=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#290=IFCPROPERTYSINGLEVALUE('IsEntrance',$,IFCBOOLEAN(.T.),$);
+#291=IFCPROPERTYSINGLEVALUE('SelfLatching',$,IFCBOOLEAN(.T.),$);
+#292=IFCPROPERTYSINGLEVALUE('SelfLocking',$,IFCBOOLEAN(.T.),$);
+#293=IFCPROPERTYSINGLEVALUE('HardwareHeight',$,IFCREAL(1.5),$);
+#294=IFCPROPERTYSINGLEVALUE('HasVisionPanel',$,IFCBOOLEAN(.T.),$);
+#295=IFCPROPERTYSINGLEVALUE('Operation',$,IFCLABEL('Outside/ Inside'),$);
+#296=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Wood'),$);
+#297=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('Grey'),$);
+#298=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#299=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#300=IFCPROPERTYSINGLEVALUE('Recyclable',$,IFCBOOLEAN(.T.),$);
+#301=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#302=IFCPROPERTYSET('0DMexample000000000081',$,'Building Permit',$,(#286,#287,#288,#289,#290,#291,#292,#293,#294,#295,#296,#297,#298,#299,#300,#301));
+#303=IFCRELDEFINESBYPROPERTIES('0DMexample000000000082',$,$,$,(#267),#302);
+#304=IFCDOOR('0DMexample000000000083',$,'Single-Flush:800x2100',$,$,$,$,'348109',2.1,0.8,.DOOR.,$,$);
+#305=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#306=IFCQUANTITYLENGTH('Height',$,$,1.5,$);
+#307=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#308=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#309=IFCELEMENTQUANTITY('0DMexample000000000084',$,'Qto_DoorBaseQuantities',$,$,(#305,#306,#307,#308));
+#310=IFCRELDEFINESBYPROPERTIES('0DMexample000000000085',$,$,$,(#304),#309);
+#311=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#312=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#313=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('2 hours'),$);
+#314=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#315=IFCPROPERTYSINGLEVALUE('HandicapAccessible',$,IFCBOOLEAN(.T.),$);
+#316=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#317=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#318=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#319=IFCPROPERTYSINGLEVALUE('SecurityRating',$,IFCLABEL('0.1'),$);
+#320=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#321=IFCPROPERTYSINGLEVALUE('SmokeStop',$,IFCBOOLEAN(.T.),$);
+#322=IFCPROPERTYSET('0DMexample000000000086',$,'Pset_DoorCommon',$,(#311,#312,#313,#314,#315,#316,#317,#318,#319,#320,#321));
+#323=IFCRELDEFINESBYPROPERTIES('0DMexample000000000087',$,$,$,(#304),#322);
+#324=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#325=IFCPROPERTYSINGLEVALUE('HandicapAccessible',$,IFCBOOLEAN(.T.),$);
+#326=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#327=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#328=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#329=IFCPROPERTYSINGLEVALUE('IsEntrance',$,IFCBOOLEAN(.T.),$);
+#330=IFCPROPERTYSINGLEVALUE('SelfLatching',$,IFCBOOLEAN(.T.),$);
+#331=IFCPROPERTYSINGLEVALUE('SelfLocking',$,IFCBOOLEAN(.T.),$);
+#332=IFCPROPERTYSINGLEVALUE('HardwareHeight',$,IFCREAL(1.5),$);
+#333=IFCPROPERTYSINGLEVALUE('HasVisionPanel',$,IFCBOOLEAN(.T.),$);
+#334=IFCPROPERTYSINGLEVALUE('Operation',$,IFCLABEL('Outside/ Inside'),$);
+#335=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Wood'),$);
+#336=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('Grey'),$);
+#337=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#338=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#339=IFCPROPERTYSINGLEVALUE('Recyclable',$,IFCBOOLEAN(.T.),$);
+#340=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#341=IFCPROPERTYSET('0DMexample000000000088',$,'Building Permit',$,(#324,#325,#326,#327,#328,#329,#330,#331,#332,#333,#334,#335,#336,#337,#338,#339,#340));
+#342=IFCRELDEFINESBYPROPERTIES('0DMexample000000000089',$,$,$,(#304),#341);
+#343=IFCDOOR('0DMexample000000000090',$,'Sliding-2 Panel:1800x2400',$,'BALCONYDOOR',$,$,'348110',2.4,1.8,.USERDEFINED.,$,$);
+#344=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#345=IFCQUANTITYLENGTH('Height',$,$,1.5,$);
+#346=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#347=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#348=IFCELEMENTQUANTITY('0DMexample000000000091',$,'Qto_DoorBaseQuantities',$,$,(#344,#345,#346,#347));
+#349=IFCRELDEFINESBYPROPERTIES('0DMexample000000000092',$,$,$,(#343),#348);
+#350=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#351=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#352=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#353=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#354=IFCPROPERTYSINGLEVALUE('HandicapAccessible',$,IFCBOOLEAN(.T.),$);
+#355=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#356=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#357=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#358=IFCPROPERTYSINGLEVALUE('SecurityRating',$,IFCLABEL('0.1'),$);
+#359=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#360=IFCPROPERTYSINGLEVALUE('SmokeStop',$,IFCBOOLEAN(.T.),$);
+#361=IFCPROPERTYSET('0DMexample000000000093',$,'Pset_DoorCommon',$,(#350,#351,#352,#353,#354,#355,#356,#357,#358,#359,#360));
+#362=IFCRELDEFINESBYPROPERTIES('0DMexample000000000094',$,$,$,(#343),#361);
+#363=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#364=IFCPROPERTYSINGLEVALUE('HandicapAccessible',$,IFCBOOLEAN(.T.),$);
+#365=IFCPROPERTYSINGLEVALUE('HasDrive',$,IFCBOOLEAN(.T.),$);
+#366=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#367=IFCPROPERTYSINGLEVALUE('SelfClosing',$,IFCBOOLEAN(.T.),$);
+#368=IFCPROPERTYSINGLEVALUE('IsEntrance',$,IFCBOOLEAN(.T.),$);
+#369=IFCPROPERTYSINGLEVALUE('SelfLatching',$,IFCBOOLEAN(.T.),$);
+#370=IFCPROPERTYSINGLEVALUE('SelfLocking',$,IFCBOOLEAN(.T.),$);
+#371=IFCPROPERTYSINGLEVALUE('HardwareHeight',$,IFCREAL(1.5),$);
+#372=IFCPROPERTYSINGLEVALUE('HasVisionPanel',$,IFCBOOLEAN(.T.),$);
+#373=IFCPROPERTYSINGLEVALUE('DoorClearWidth',$,IFCREAL(1.5),$);
+#374=IFCPROPERTYSINGLEVALUE('Operation',$,IFCLABEL('Outside/ Inside'),$);
+#375=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Wood'),$);
+#376=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('Grey'),$);
+#377=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#378=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#379=IFCPROPERTYSINGLEVALUE('Recyclable',$,IFCBOOLEAN(.T.),$);
+#380=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#381=IFCPROPERTYSET('0DMexample000000000095',$,'Building Permit',$,(#363,#364,#365,#366,#367,#368,#369,#370,#371,#372,#373,#374,#375,#376,#377,#378,#379,#380));
+#382=IFCRELDEFINESBYPROPERTIES('0DMexample000000000096',$,$,$,(#343),#381);
+#383=IFCSLAB('0DMexample000000000097',$,'Floor:RC Slab 200',$,$,$,$,'348111',.BASESLAB.);
+#384=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#385=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#386=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#387=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#388=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#389=IFCQUANTITYLENGTH('Depth',$,$,1.5,$);
+#390=IFCELEMENTQUANTITY('0DMexample000000000098',$,'Qto_SlabBaseQuantities',$,$,(#384,#385,#386,#387,#388,#389));
+#391=IFCRELDEFINESBYPROPERTIES('0DMexample000000000099',$,$,$,(#383),#390);
+#392=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#393=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('New'),$);
+#394=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#395=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#396=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#397=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#398=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#399=IFCPROPERTYSINGLEVALUE('PitchAngle',$,IFCREAL(1.5),$);
+#400=IFCPROPERTYSINGLEVALUE('SurfaceSpreadOfFlame',$,IFCREAL(1.5),$);
+#401=IFCPROPERTYSET('0DMexample000000000100',$,'Pset_SlabCommon',$,(#392,#393,#394,#395,#396,#397,#398,#399,#400));
+#402=IFCRELDEFINESBYPROPERTIES('0DMexample000000000101',$,$,$,(#383),#401);
+#403=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#404=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#405=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#406=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#407=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#408=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Gypsum'),$);
+#409=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('Grey'),$);
+#410=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#411=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#412=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#413=IFCPROPERTYSET('0DMexample000000000102',$,'Building Permit',$,(#403,#404,#405,#406,#407,#408,#409,#410,#411,#412));
+#414=IFCRELDEFINESBYPROPERTIES('0DMexample000000000103',$,$,$,(#383),#413);
+#415=IFCPROPERTYSINGLEVALUE('AssessmentDate',$,IFCLABEL('2021-01-01'),$);
+#416=IFCPROPERTYSINGLEVALUE('AssessmentCondition',$,IFCLABEL('Good'),$);
+#417=IFCPROPERTYSINGLEVALUE('AssessmentDescription',$,IFCLABEL('Text'),$);
+#418=IFCPROPERTYSET('0DMexample000000000104',$,'Pset_Condition',$,(#415,#416,#417));
+#419=IFCRELDEFINESBYPROPERTIES('0DMexample000000000105',$,$,$,(#383),#418);
+#420=IFCPROPERTYSINGLEVALUE('StrengthClass',$,IFCLABEL('C14'),$);
+#421=IFCPROPERTYSINGLEVALUE('ReinforcementVolumeRatio',$,IFCREAL(1.5),$);
+#422=IFCPROPERTYSINGLEVALUE('ReinforcementAreaRatio',$,IFCREAL(1.5),$);
+#423=IFCPROPERTYSET('0DMexample000000000106',$,'Pset_ConcreteElementGeneral',$,(#420,#421,#422));
+#424=IFCRELDEFINESBYPROPERTIES('0DMexample000000000107',$,$,$,(#383),#423);
+#425=IFCSLAB('0DMexample000000000108',$,'Floor:RC Slab 200',$,$,$,$,'348112',.FLOOR.);
+#426=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#427=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#428=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#429=IFCQUANTITYLENGTH('Volume',$,$,1.5,$);
+#430=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#431=IFCQUANTITYLENGTH('Depth',$,$,1.5,$);
+#432=IFCELEMENTQUANTITY('0DMexample000000000109',$,'Qto_SlabBaseQuantities',$,$,(#426,#427,#428,#429,#430,#431));
+#433=IFCRELDEFINESBYPROPERTIES('0DMexample000000000110',$,$,$,(#425),#432);
+#434=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('New'),$);
+#435=IFCPROPERTYSINGLEVALUE('Compartmentation',$,IFCBOOLEAN(.T.),$);
+#436=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#437=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#438=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#439=IFCPROPERTYSINGLEVALUE('Combustible',$,IFCBOOLEAN(.T.),$);
+#440=IFCPROPERTYSINGLEVALUE('PitchAngle',$,IFCREAL(1.5),$);
+#441=IFCPROPERTYSINGLEVALUE('SurfaceSpreadOfFlame',$,IFCREAL(1.5),$);
+#442=IFCPROPERTYSET('0DMexample000000000111',$,'Pset_SlabCommon',$,(#434,#435,#436,#437,#438,#439,#440,#441));
+#443=IFCRELDEFINESBYPROPERTIES('0DMexample000000000112',$,$,$,(#425),#442);
+#444=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#445=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#446=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#447=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Gypsum'),$);
+#448=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('Grey'),$);
+#449=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#450=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#451=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#452=IFCPROPERTYSET('0DMexample000000000113',$,'Building Permit',$,(#444,#445,#446,#447,#448,#449,#450,#451));
+#453=IFCRELDEFINESBYPROPERTIES('0DMexample000000000114',$,$,$,(#425),#452);
+#454=IFCPROPERTYSINGLEVALUE('AssessmentDate',$,IFCLABEL('2021-01-01'),$);
+#455=IFCPROPERTYSINGLEVALUE('AssessmentCondition',$,IFCLABEL('Good'),$);
+#456=IFCPROPERTYSINGLEVALUE('AssessmentDescription',$,IFCLABEL('Text'),$);
+#457=IFCPROPERTYSET('0DMexample000000000115',$,'Pset_Condition',$,(#454,#455,#456));
+#458=IFCRELDEFINESBYPROPERTIES('0DMexample000000000116',$,$,$,(#425),#457);
+#459=IFCPROPERTYSINGLEVALUE('StrengthClass',$,IFCLABEL('C14'),$);
+#460=IFCPROPERTYSINGLEVALUE('ReinforcementVolumeRatio',$,IFCREAL(1.5),$);
+#461=IFCPROPERTYSINGLEVALUE('ReinforcementAreaRatio',$,IFCREAL(1.5),$);
+#462=IFCPROPERTYSET('0DMexample000000000117',$,'Pset_ConcreteElementGeneral',$,(#459,#460,#461));
+#463=IFCRELDEFINESBYPROPERTIES('0DMexample000000000118',$,$,$,(#425),#462);
+#464=IFCCOLUMN('0DMexample000000000119',$,'RC Column:300x600',$,$,$,$,'348113',.COLUMN.);
+#465=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#466=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#467=IFCQUANTITYLENGTH('GrossVolume',$,$,1.5,$);
+#468=IFCELEMENTQUANTITY('0DMexample000000000120',$,'Qto_ColumnBaseQuantities',$,$,(#465,#466,#467));
+#469=IFCRELDEFINESBYPROPERTIES('0DMexample000000000121',$,$,$,(#464),#468);
+#470=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#471=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#472=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#473=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#474=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#475=IFCPROPERTYSINGLEVALUE('Slope',$,IFCREAL(1.5),$);
+#476=IFCPROPERTYSINGLEVALUE('Capacity',$,IFCLABEL('10'),$);
+#477=IFCPROPERTYSET('0DMexample000000000122',$,'Pset_ColumnCommon',$,(#470,#471,#472,#473,#474,#475,#476));
+#478=IFCRELDEFINESBYPROPERTIES('0DMexample000000000123',$,$,$,(#464),#477);
+#479=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#480=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#481=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#482=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#483=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#484=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#485=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#486=IFCPROPERTYSET('0DMexample000000000124',$,'Building Permit',$,(#479,#480,#481,#482,#483,#484,#485));
+#487=IFCRELDEFINESBYPROPERTIES('0DMexample000000000125',$,$,$,(#464),#486);
+#488=IFCPROPERTYSINGLEVALUE('AssessmentDate',$,IFCLABEL('2021-01-01'),$);
+#489=IFCPROPERTYSINGLEVALUE('AssessmentCondition',$,IFCLABEL('Good'),$);
+#490=IFCPROPERTYSINGLEVALUE('AssessmentDescription',$,IFCLABEL('Free Text'),$);
+#491=IFCPROPERTYSET('0DMexample000000000126',$,'Pset_Condition',$,(#488,#489,#490));
+#492=IFCRELDEFINESBYPROPERTIES('0DMexample000000000127',$,$,$,(#464),#491);
+#493=IFCPROPERTYSINGLEVALUE('ReinforcementVolumeRatio',$,IFCREAL(1.5),$);
+#494=IFCPROPERTYSINGLEVALUE('ReinforcementAreaRatio',$,IFCREAL(1.5),$);
+#495=IFCPROPERTYSINGLEVALUE('ConcreteCover',$,IFCLABEL('1m'),$);
+#496=IFCPROPERTYSET('0DMexample000000000128',$,'Pset_ConcreteElementGeneral',$,(#493,#494,#495));
+#497=IFCRELDEFINESBYPROPERTIES('0DMexample000000000129',$,$,$,(#464),#496);
+#498=IFCCOLUMN('0DMexample000000000130',$,'RC Column:300x600',$,$,$,$,'348114',.COLUMN.);
+#499=IFCQUANTITYLENGTH('Length',$,$,1.5,$);
+#500=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#501=IFCQUANTITYLENGTH('GrossVolume',$,$,1.5,$);
+#502=IFCELEMENTQUANTITY('0DMexample000000000131',$,'Qto_ColumnBaseQuantities',$,$,(#499,#500,#501));
+#503=IFCRELDEFINESBYPROPERTIES('0DMexample000000000132',$,$,$,(#498),#502);
+#504=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#505=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#506=IFCPROPERTYSINGLEVALUE('ThermalTransmittance',$,IFCREAL(1.5),$);
+#507=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#508=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#509=IFCPROPERTYSINGLEVALUE('Slope',$,IFCREAL(1.5),$);
+#510=IFCPROPERTYSINGLEVALUE('Capacity',$,IFCLABEL('10'),$);
+#511=IFCPROPERTYSET('0DMexample000000000133',$,'Pset_ColumnCommon',$,(#504,#505,#506,#507,#508,#509,#510));
+#512=IFCRELDEFINESBYPROPERTIES('0DMexample000000000134',$,$,$,(#498),#511);
+#513=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#514=IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN(.T.),$);
+#515=IFCPROPERTYSINGLEVALUE('CompressiveStrength',$,IFCREAL(1.5),$);
+#516=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Concrete'),$);
+#517=IFCPROPERTYSINGLEVALUE('RecycledConcreteRatio',$,IFCREAL(1.5),$);
+#518=IFCPROPERTYSINGLEVALUE('RecycledSteelRatio',$,IFCREAL(1.5),$);
+#519=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#520=IFCPROPERTYSET('0DMexample000000000135',$,'Building Permit',$,(#513,#514,#515,#516,#517,#518,#519));
+#521=IFCRELDEFINESBYPROPERTIES('0DMexample000000000136',$,$,$,(#498),#520);
+#522=IFCPROPERTYSINGLEVALUE('AssessmentDate',$,IFCLABEL('2021-01-01'),$);
+#523=IFCPROPERTYSINGLEVALUE('AssessmentCondition',$,IFCLABEL('Good'),$);
+#524=IFCPROPERTYSINGLEVALUE('AssessmentDescription',$,IFCLABEL('Free Text'),$);
+#525=IFCPROPERTYSET('0DMexample000000000137',$,'Pset_Condition',$,(#522,#523,#524));
+#526=IFCRELDEFINESBYPROPERTIES('0DMexample000000000138',$,$,$,(#498),#525);
+#527=IFCWINDOW('0DMexample000000000139',$,'Fixed:1200x1500',$,$,$,$,'348115',1.5,1.2,.WINDOW.,$,$);
+#528=IFCQUANTITYLENGTH('Width',$,$,1.5,$);
+#529=IFCQUANTITYLENGTH('Area',$,$,1.5,$);
+#530=IFCQUANTITYLENGTH('Perimeter',$,$,1.5,$);
+#531=IFCELEMENTQUANTITY('0DMexample000000000140',$,'Qto_WindowBaseQuantities',$,$,(#528,#529,#530));
+#532=IFCRELDEFINESBYPROPERTIES('0DMexample000000000141',$,$,$,(#527),#531);
+#533=IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL('Existing'),$);
+#534=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#535=IFCPROPERTYSINGLEVALUE('GlazedAreaFraction',$,IFCREAL(1.5),$);
+#536=IFCPROPERTYSINGLEVALUE('AcousticRating',$,IFCLABEL('0.05'),$);
+#537=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCINTEGER(60),$);
+#538=IFCPROPERTYSINGLEVALUE('HasSillExternal',$,IFCBOOLEAN(.T.),$);
+#539=IFCPROPERTYSINGLEVALUE('HasSillInternal',$,IFCBOOLEAN(.T.),$);
+#540=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#541=IFCPROPERTYSET('0DMexample000000000142',$,'Pset_WindowCommon',$,(#533,#534,#535,#536,#537,#538,#539,#540));
+#542=IFCRELDEFINESBYPROPERTIES('0DMexample000000000143',$,$,$,(#527),#541);
+#543=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#544=IFCPROPERTYSINGLEVALUE('FireExit',$,IFCBOOLEAN(.T.),$);
+#545=IFCPROPERTYSINGLEVALUE('LightReflectanceValue',$,IFCREAL(1.5),$);
+#546=IFCPROPERTYSINGLEVALUE('SolarReflectanceIndex',$,IFCREAL(1.5),$);
+#547=IFCPROPERTYSINGLEVALUE('Color',$,IFCLABEL('White'),$);
+#548=IFCPROPERTYSINGLEVALUE('Operation',$,IFCLABEL('Sliding/Openable/fixed'),$);
+#549=IFCPROPERTYSINGLEVALUE('Sill Height',$,IFCREAL(1.5),$);
+#550=IFCPROPERTYSINGLEVALUE('IfcMaterial',$,IFCLABEL('Aluminum'),$);
+#551=IFCPROPERTYSINGLEVALUE('Recyclable',$,IFCBOOLEAN(.T.),$);
+#552=IFCPROPERTYSINGLEVALUE('RecycledAluminium Ratio',$,IFCREAL(1.5),$);
+#553=IFCPROPERTYSINGLEVALUE('MaterialPassportCodes',$,IFCLABEL('Sample'),$);
+#554=IFCPROPERTYSET('0DMexample000000000144',$,'Building Permit',$,(#543,#544,#545,#546,#547,#548,#549,#550,#551,#552,#553));
+#555=IFCRELDEFINESBYPROPERTIES('0DMexample000000000145',$,$,$,(#527),#554);
+#556=IFCBUILDINGELEMENTPROXY('0DMexample000000000146',$,'Generic Model:Planter',$,$,$,$,'348200',$);
+#557=IFCRELCONTAINEDINSPATIALSTRUCTURE('0DMexample000000000147',$,$,$,(#64,#94,#122,#197,#227,#267,#383,#464,#498),#38);
+#558=IFCRELCONTAINEDINSPATIALSTRUCTURE('0DMexample000000000148',$,$,$,(#149,#167,#304,#343,#425,#527),#50);
+ENDSEC;
+END-ISO-10303-21;
+</script>
+<script>/* DM IFC checker core: reads an IFC (STEP) file as text and checks element properties
+   against the compact rule set that build.js produces from IDS.json.
+   Works in the browser (window.DMCheck) and in Node (require). No dependencies. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.DMCheck = factory();
+})(this, function () {
+  'use strict';
+
+  // Occurrence types that are checked as their parent type.
+  var ALIAS = {
+    IFCWALLSTANDARDCASE: 'IFCWALL', IFCWALLELEMENTEDCASE: 'IFCWALL', IFCBEAMSTANDARDCASE: 'IFCBEAM',
+    IFCCOLUMNSTANDARDCASE: 'IFCCOLUMN', IFCSLABSTANDARDCASE: 'IFCSLAB', IFCSLABELEMENTEDCASE: 'IFCSLAB',
+    IFCDOORSTANDARDCASE: 'IFCDOOR', IFCWINDOWSTANDARDCASE: 'IFCWINDOW', IFCMEMBERSTANDARDCASE: 'IFCMEMBER',
+    IFCPLATESTANDARDCASE: 'IFCPLATE'
+  };
+  // IFC2x3 has no IfcTank / IfcWasteTerminal occurrences; they are recognised through their type object.
+  var VIA_TYPE = { IFCFLOWTERMINAL: { IFCWASTETERMINALTYPE: 'IFCWASTETERMINAL' }, IFCFLOWSTORAGEDEVICE: { IFCTANKTYPE: 'IFCTANK' } };
+  // Position of PredefinedType in the occurrence's argument list (default 8).
+  var PRE_IDX = { IFCDOOR: 10, IFCWINDOW: 10, IFCSTAIRFLIGHT: 12, IFCELEMENTASSEMBLY: 9, IFCSPACE: 9 };
+  var NO_PRE = { IFCPROJECT: 1, IFCSITE: 1, IFCBUILDING: 1, IFCBUILDINGSTOREY: 1 };
+  // Common element types the rule file does not cover; counted so the report can say so.
+  var UNCHECKED = {};
+  ['IfcBuildingElementProxy', 'IfcFurnishingElement', 'IfcFurniture', 'IfcSanitaryTerminal', 'IfcFlowTerminal', 'IfcFlowSegment',
+    'IfcFlowFitting', 'IfcFlowStorageDevice', 'IfcShadingDevice', 'IfcChimney', 'IfcBuildingElementPart', 'IfcDiscreteAccessory',
+    'IfcReinforcingBar', 'IfcGeographicElement'].forEach(function (n) { UNCHECKED[n.toUpperCase()] = n; });
+  var REC = /^\s*#(\d+)\s*=\s*([A-Za-z0-9_]+)\s*\(/;
+
+  function decode(s) {
+    if (s.indexOf('\\') === -1) return s;
+    return s
+      .replace(/\\X2\\([0-9A-Fa-f]+)\\X0\\/g, function (m, h) { var o = ''; for (var i = 0; i + 4 <= h.length; i += 4) o += String.fromCharCode(parseInt(h.substr(i, 4), 16)); return o; })
+      .replace(/\\X4\\([0-9A-Fa-f]+)\\X0\\/g, function (m, h) { var o = ''; for (var i = 0; i + 8 <= h.length; i += 8) o += String.fromCodePoint(parseInt(h.substr(i, 8), 16)); return o; })
+      .replace(/\\X\\([0-9A-Fa-f]{2})/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); })
+      .replace(/\\S\\(.)/g, function (m, c) { return String.fromCharCode(c.charCodeAt(0) + 128); })
+      .replace(/\\\\/g, '\\');
+  }
+
+  // Parses a STEP argument list starting just after its opening parenthesis.
+  // null = $ or *, string, number, {r: id}, {e: 'ENUM'}, {t: 'IFCTYPE', v: value}, or a nested array.
+  function parseList(s, i) {
+    var out = [], n = s.length, c, j, k;
+    while (i < n) {
+      c = s.charCodeAt(i);
+      if (c === 32 || c === 44 || c === 10 || c === 13 || c === 9) { i++; continue; }
+      if (c === 41) return [out, i + 1];
+      if (c === 36 || c === 42) { out.push(null); i++; continue; }
+      if (c === 39) {
+        var str = ''; j = i + 1;
+        for (;;) {
+          k = s.indexOf("'", j);
+          if (k < 0) { str += s.slice(j); j = n; break; }
+          str += s.slice(j, k);
+          if (s.charCodeAt(k + 1) === 39) { str += "'"; j = k + 2; } else { j = k + 1; break; }
+        }
+        out.push(decode(str)); i = j; continue;
+      }
+      if (c === 35) {
+        j = i + 1; while (j < n && (k = s.charCodeAt(j)) >= 48 && k <= 57) j++;
+        out.push({ r: +s.slice(i + 1, j) }); i = j; continue;
+      }
+      if (c === 46 && (k = s.charCodeAt(i + 1)) >= 65 && k <= 122) {
+        k = s.indexOf('.', i + 1); if (k < 0) k = n;
+        out.push({ e: s.slice(i + 1, k).toUpperCase() }); i = k + 1; continue;
+      }
+      if (c === 40) { var r = parseList(s, i + 1); out.push(r[0]); i = r[1]; continue; }
+      if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {
+        j = i; while (j < n && /[A-Za-z0-9_]/.test(s.charAt(j))) j++;
+        var t = s.slice(i, j).toUpperCase();
+        while (j < n && s.charCodeAt(j) <= 32) j++;
+        if (s.charCodeAt(j) === 40) { var r2 = parseList(s, j + 1); out.push({ t: t, v: r2[0].length ? r2[0][0] : null }); i = r2[1]; }
+        else { out.push({ e: t }); i = j; }
+        continue;
+      }
+      j = i; while (j < n && /[0-9+\-.Ee]/.test(s.charAt(j))) j++;
+      if (j === i) { i++; continue; }
+      out.push(parseFloat(s.slice(i, j))); i = j;
+    }
+    return [out, i];
+  }
+
+  function refs(v) {
+    var out = [];
+    if (Array.isArray(v)) { for (var i = 0; i < v.length; i++) if (v[i] && v[i].r !== undefined) out.push(v[i].r); }
+    else if (v && v.r !== undefined) out.push(v.r);
+    return out;
+  }
+  function str(v) { return typeof v === 'string' ? v : (v && typeof v.v === 'string' ? v.v : null); }
+  function en(v) { return v && v.e ? v.e : null; }
+  // Unwraps IFCLABEL('x'), IFCBOOLEAN(.T.), IFCREAL(1.) and so on to a plain JS value; undefined = no value.
+  function plain(v) {
+    if (v === null || v === undefined) return undefined;
+    if (v.t !== undefined) return plain(v.v);
+    if (v.e !== undefined) return v.e === 'T' || v.e === 'TRUE' ? true : v.e === 'F' || v.e === 'FALSE' ? false : v.e === 'U' || v.e === 'UNKNOWN' ? undefined : v.e;
+    if (Array.isArray(v)) { var a = v.map(plain).filter(function (x) { return x !== undefined && x !== ''; }); return a.length ? a.join(', ') : undefined; }
+    if (v.r !== undefined) return '#' + v.r;
+    if (typeof v === 'string') return v.trim() === '' ? undefined : v;
+    return v;
+  }
+
+  function createParser(elementTypes) {
+    var wanted = {};
+    elementTypes.forEach(function (t) { wanted[t.toUpperCase()] = 1; });
+    var m = {
+      schema: '', records: 0, elements: [], psets: new Map(), props: new Map(), types: new Map(),
+      relProps: new Map(), typeOf: new Map(), contained: new Map(), aggParent: new Map(), addresses: new Map(), other: {}
+    };
+    var buf = '', scan = 0, inStr = false;
+
+    function record(s) {
+      var x = REC.exec(s);
+      if (!x) {
+        if (!m.schema) { var f = /FILE_SCHEMA\s*\(\s*\(\s*'([^']+)'/i.exec(s); if (f) m.schema = f[1].toUpperCase(); }
+        return;
+      }
+      m.records++;
+      var raw = x[2].toUpperCase(), id = +x[1], canon = ALIAS[raw] || raw, a;
+      if (wanted[canon] || VIA_TYPE[raw]) {
+        a = parseList(s, x[0].length)[0];
+        var spatial = canon === 'IFCSPACE' || NO_PRE[canon];
+        var pre = NO_PRE[canon] ? null : en(a[PRE_IDX[canon] || 8]);
+        m.elements.push({
+          id: id, raw: raw, canon: canon, gid: str(a[0]) || '', name: str(a[2]) || '', desc: str(a[3]),
+          objType: str(a[4]), tag: spatial ? '' : (str(a[7]) || ''), longName: spatial ? str(a[canon === 'IFCPROJECT' ? 5 : 7]) : null,
+          pre: pre, addr: canon === 'IFCBUILDING' && a[11] && a[11].r !== undefined ? a[11].r : null
+        });
+        return;
+      }
+      if (raw === 'IFCPROPERTYSINGLEVALUE') { a = parseList(s, x[0].length)[0]; m.props.set(id, [str(a[0]) || '', plain(a[2])]); return; }
+      if (raw === 'IFCPROPERTYENUMERATEDVALUE' || raw === 'IFCPROPERTYLISTVALUE') { a = parseList(s, x[0].length)[0]; m.props.set(id, [str(a[0]) || '', plain(a[2])]); return; }
+      if (raw.lastIndexOf('IFCQUANTITY', 0) === 0) { a = parseList(s, x[0].length)[0]; m.props.set(id, [str(a[0]) || '', plain(a[3])]); return; }
+      if (raw === 'IFCPROPERTYBOUNDEDVALUE' || raw === 'IFCPROPERTYTABLEVALUE' || raw === 'IFCPROPERTYREFERENCEVALUE' || raw === 'IFCCOMPLEXPROPERTY' || raw === 'IFCPHYSICALCOMPLEXQUANTITY') {
+        a = parseList(s, x[0].length)[0]; m.props.set(id, [str(a[0]) || '', '(complex value)']); return;
+      }
+      if (raw === 'IFCPROPERTYSET') { a = parseList(s, x[0].length)[0]; m.psets.set(id, { n: (str(a[2]) || '').trim(), p: refs(a[4]) }); return; }
+      if (raw === 'IFCELEMENTQUANTITY') { a = parseList(s, x[0].length)[0]; m.psets.set(id, { n: (str(a[2]) || '').trim(), p: refs(a[5]) }); return; }
+      if (raw === 'IFCRELDEFINESBYPROPERTIES') {
+        a = parseList(s, x[0].length)[0];
+        var defs = refs(a[5]);
+        refs(a[4]).forEach(function (o) { var l = m.relProps.get(o); if (!l) m.relProps.set(o, l = []); for (var i = 0; i < defs.length; i++) l.push(defs[i]); });
+        return;
+      }
+      if (raw === 'IFCRELDEFINESBYTYPE') { a = parseList(s, x[0].length)[0]; var tr = refs(a[5])[0]; if (tr !== undefined) refs(a[4]).forEach(function (o) { m.typeOf.set(o, tr); }); return; }
+      if (raw === 'IFCRELCONTAINEDINSPATIALSTRUCTURE') { a = parseList(s, x[0].length)[0]; var st = refs(a[5])[0]; if (st !== undefined) refs(a[4]).forEach(function (o) { m.contained.set(o, st); }); return; }
+      if (raw === 'IFCRELAGGREGATES') { a = parseList(s, x[0].length)[0]; var pa = refs(a[4])[0]; if (pa !== undefined) refs(a[5]).forEach(function (o) { m.aggParent.set(o, pa); }); return; }
+      if (raw === 'IFCPOSTALADDRESS') {
+        a = parseList(s, x[0].length)[0];
+        m.addresses.set(id, a.some(function (v, i) { return i >= 3 && plain(v) !== undefined; })); return;
+      }
+      if (raw === 'IFCDOORSTYLE' || raw === 'IFCWINDOWSTYLE' || (raw.length > 7 && raw.slice(-4) === 'TYPE')) {
+        a = parseList(s, x[0].length)[0];
+        if (a.length < 6) return;
+        var isStyle = raw.slice(-5) === 'STYLE';
+        m.types.set(id, { raw: raw, psets: refs(a[5]), pre: isStyle ? null : en(a[9]), etype: isStyle ? null : str(a[8]) });
+        return;
+      }
+      if (UNCHECKED[raw]) m.other[raw] = (m.other[raw] || 0) + 1;
+    }
+
+    return {
+      feed: function (chunk) {
+        buf += chunk;
+        var start = 0, i = scan, n = buf.length, c;
+        for (; i < n; i++) {
+          c = buf.charCodeAt(i);
+          if (c === 39) inStr = !inStr;
+          else if (c === 59 && !inStr) { record(buf.slice(start, i)); start = i + 1; }
+        }
+        buf = start ? buf.slice(start) : buf;
+        scan = buf.length;
+      },
+      finish: function () { if (buf.trim()) record(buf); buf = ''; return m; }
+    };
+  }
+
+  function norm(s) { return String(s || '').trim().toLowerCase(); }
+  function up(s) { return s ? String(s).trim().toUpperCase() : null; }
+
+  // 0 = fine, 4 = has a value but it does not read as the expected data type.
+  function checkValue(v, type) {
+    var t = norm(type), s = typeof v === 'string' ? v.trim() : v;
+    if (t === 'bool') return typeof v === 'boolean' || (typeof s === 'string' && /^(yes|no|true|false|y|n|1|0)$/i.test(s)) || v === 1 || v === 0 ? 0 : 4;
+    if (t === 'int') return (typeof v === 'number' && Math.abs(v - Math.round(v)) < 1e-9) || (typeof s === 'string' && /^[-+]?\d+(\.0+)?$/.test(s)) ? 0 : 4;
+    if (t === 'double') return typeof v === 'number' || (typeof s === 'string' && s !== '' && isFinite(Number(s))) ? 0 : 4;
+    if (t === 'date') return typeof v === 'number' || (typeof s === 'string' && !isNaN(Date.parse(s))) || /^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/.test(String(s)) ? 0 : 4;
+    return 0;
+  }
+
+  function subMatches(sub, P, O) {
+    var X = sub[0], ovr = sub[1], loose = !P || P === 'USERDEFINED' || P === 'NOTDEFINED';
+    if (X === 'NOTFOUND') return true;
+    if (!ovr) return P === X || (loose && O === X);
+    return O === ovr && (P === X || loose);
+  }
+
+  /* Status codes per element and rule attribute:
+     0 ok · 1 property set not on the element · 2 property not in the set · 3 no value · 4 value does not read as the expected type */
+  function evaluate(model, rules) {
+    var is2x3 = /2X3/.test(model.schema || '');
+    var ver = rules.versions.filter(function (v) { return /2x3/i.test(v.name) === is2x3; })[0] || rules.versions[rules.versions.length - 1];
+    var byType = {}, results = [], byId = new Map(), other = {};
+    Object.keys(model.other).forEach(function (k) { other[k] = model.other[k]; });
+    ver.groups.forEach(function (g) {
+      var r = { name: g.name, type: g.type, subs: g.subs, attrs: g.attrs, elements: [], anyType: g.subs.some(function (s) { return s[0] === 'NOTFOUND'; }) };
+      results.push(r);
+      (byType[g.type.toUpperCase()] = byType[g.type.toUpperCase()] || []).push(r);
+    });
+    model.elements.forEach(function (e) { byId.set(e.id, e); });
+
+    var psetCache = new Map();
+    function pset(id) {
+      var c = psetCache.get(id);
+      if (c !== undefined) return c;
+      var p = model.psets.get(id);
+      if (!p) { psetCache.set(id, null); return null; }
+      var map = new Map();
+      for (var i = 0; i < p.p.length; i++) { var pr = model.props.get(p.p[i]); if (pr) { var k = norm(pr[0]); if (!map.has(k) || map.get(k) === undefined) map.set(k, pr[1]); } }
+      c = { name: norm(p.n), map: map };
+      psetCache.set(id, c);
+      return c;
+    }
+    function storeyOf(e) {
+      if (NO_PRE[e.canon]) return '';
+      var id = e.id, hop = 0, p;
+      while (hop++ < 8) {
+        p = model.contained.get(id); if (p === undefined) p = model.aggParent.get(id);
+        if (p === undefined) return '';
+        var n = byId.get(p);
+        if (n && n.canon === 'IFCBUILDINGSTOREY') return n.name;
+        if (n && (n.canon === 'IFCBUILDING' || n.canon === 'IFCSITE')) return n.name ? '(' + n.name + ')' : '';
+        id = p;
+      }
+      return '';
+    }
+
+    model.elements.forEach(function (e) {
+      var tid = model.typeOf.get(e.id), tobj = tid !== undefined ? model.types.get(tid) : null, canon = e.canon;
+      if (VIA_TYPE[e.raw]) {
+        canon = tobj && VIA_TYPE[e.raw][tobj.raw];
+        if (!canon) { other[e.raw] = (other[e.raw] || 0) + 1; return; }
+      }
+      var cands = byType[canon];
+      if (!cands) return;
+      var P = e.pre && e.pre !== 'NOTDEFINED' ? e.pre : (tobj && tobj.pre && tobj.pre !== 'NOTDEFINED' ? tobj.pre : (e.pre || null));
+      var O = up(e.objType) || up(tobj && tobj.etype);
+      var g = null, typeOk = 0, i;
+      for (i = 0; i < cands.length && !g; i++) if (cands[i].anyType || cands[i].subs.some(function (s) { return subMatches(s, P, O); })) g = cands[i];
+      if (!g) { g = cands[cands.length - 1]; typeOk = P && P !== 'NOTDEFINED' ? 1 : 0; } // no explicit type (usual in IFC2x3) is not flagged
+
+      var ids = (model.relProps.get(e.id) || []).concat(tobj ? tobj.psets : []), sets = [];
+      for (i = 0; i < ids.length; i++) { var ps = pset(ids[i]); if (ps) sets.push(ps); }
+      var st = new Uint8Array(g.attrs.length);
+      for (i = 0; i < g.attrs.length; i++) {
+        var a = g.attrs[i], code;
+        if (/ attribute$/i.test(a[0])) {
+          var ref = norm(a[2]), val = ref === 'description' ? e.desc : ref === 'longname' ? e.longName : ref === 'buildingaddress' ? (e.addr !== null && model.addresses.get(e.addr) ? 'address' : null) : undefined;
+          code = val === undefined || val === null || String(val).trim() === '' ? 3 : (ref === 'buildingaddress' ? 0 : checkValue(val, a[3]));
+        } else {
+          var want = norm(a[0]), alt = want.lastIndexOf('qto_', 0) === 0 ? 'basequantities' : null, k1 = norm(a[2]), k2 = norm(a[1]);
+          code = 1;
+          for (var j = 0; j < sets.length; j++) {
+            if (sets[j].name !== want && sets[j].name !== alt) continue;
+            var mp = sets[j].map, key = mp.has(k1) ? k1 : mp.has(k2) ? k2 : null;
+            if (key === null) { if (code === 1) code = 2; continue; }
+            var v = mp.get(key);
+            if (v === undefined) { if (code < 3) code = 3; continue; }
+            code = checkValue(v, a[3]); break;
+          }
+        }
+        st[i] = code;
+      }
+      g.elements.push({ id: e.id, name: e.name, gid: e.gid, tag: e.tag, P: P, O: O, storey: storeyOf(e), st: st, typeOk: typeOk });
+    });
+
+    var pretty = {};
+    Object.keys(other).forEach(function (k) { if (other[k]) pretty[UNCHECKED[k] || k] = other[k]; });
+    other = pretty;
+    return { schema: model.schema, ruleSet: ver.name, records: model.records, phases: rules.phases, groups: results.filter(function (g) { return g.elements.length; }), other: other };
+  }
+
+  // Rolls a result up for one phase (index into rules.phases).
+  function summarize(result, ph) {
+    var out = { phase: ph, elements: 0, failing: 0, missing: 0, warn: 0, typeAdv: 0, required: 0, groups: [] };
+    result.groups.forEach(function (g) {
+      var req = [], i, j;
+      for (i = 0; i < g.attrs.length; i++) if (g.attrs[i][5].charAt(ph) === '1') req.push(i);
+      var s = { g: g, req: req, n: g.elements.length, fail: 0, miss: 0, warn: 0, typeAdv: 0, perAttr: new Int32Array(g.attrs.length), perWarn: new Int32Array(g.attrs.length) };
+      for (j = 0; j < g.elements.length; j++) {
+        var e = g.elements[j], bad = 0;
+        for (i = 0; i < req.length; i++) {
+          var c = e.st[req[i]];
+          if (c >= 1 && c <= 3) { bad++; s.perAttr[req[i]]++; } else if (c === 4) { s.warn++; s.perWarn[req[i]]++; }
+        }
+        if (bad) { s.fail++; s.miss += bad; }
+        if (e.typeOk) s.typeAdv++;
+      }
+      out.elements += s.n; out.failing += s.fail; out.missing += s.miss; out.warn += s.warn; out.typeAdv += s.typeAdv; out.required += req.length;
+      out.groups.push(s);
+    });
+    return out;
+  }
+
+  // The most frequently missing property names of a group summary, merged across property sets.
+  function topMissing(s, n) {
+    var best = {};
+    s.req.forEach(function (i) { var k = s.g.attrs[i][2]; if (s.perAttr[i] > (best[k] || 0)) best[k] = s.perAttr[i]; });
+    return Object.keys(best).sort(function (a, b) { return best[b] - best[a]; }).slice(0, n).map(function (k) { return [k, best[k]]; });
+  }
+
+  var PROBLEM = ['', 'Property set not found', 'Property not found', 'No value', 'Value does not read as the expected type'];
+
+  // One row per problem, for export.
+  function issueRows(summary, onlyGroup) {
+    var rows = [['Element', 'IFC type', 'Name', 'Revit ID', 'GlobalId', 'Storey', 'Property set', 'Property', 'Expected type', 'Problem']];
+    summary.groups.forEach(function (s) {
+      if (onlyGroup && s.g !== onlyGroup) return;
+      s.g.elements.forEach(function (e) {
+        s.req.forEach(function (i) {
+          var c = e.st[i]; if (!c) return;
+          var a = s.g.attrs[i];
+          rows.push([s.g.name, s.g.type, e.name, e.tag, e.gid, e.storey, a[0], (a[2] || a[1]).trim(), a[3], PROBLEM[c]]);
+        });
+      });
+    });
+    return rows;
+  }
+
+  function elementTypes(rules) {
+    var t = {};
+    rules.versions.forEach(function (v) { v.groups.forEach(function (g) { t[g.type] = 1; }); });
+    return Object.keys(t);
+  }
+
+  function checkText(text, rules) {
+    var p = createParser(elementTypes(rules));
+    p.feed(text);
+    return evaluate(p.finish(), rules);
+  }
+
+  return { createParser: createParser, evaluate: evaluate, summarize: summarize, issueRows: issueRows, topMissing: topMissing, elementTypes: elementTypes, checkText: checkText, PROBLEM: PROBLEM, parseList: parseList };
+});
+</script>
+<script>
+(function () {
+  var RULES = JSON.parse(document.getElementById('rules-data').textContent);
+  var PHASES = RULES.phases, C = window.DMCheck;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var num = function (n) { return Number(n).toLocaleString('en-US'); };
+  var store = {
+    get: function (k) { try { return localStorage.getItem('dmchk-' + k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem('dmchk-' + k, v); } catch (e) {} }
+  };
+  var PAGE = 150;
+  var state = { result: null, sum: null, phase: 1, group: null, view: 'prop', only: true, prop: -1, limit: PAGE, file: '', size: 0, example: false, busy: null, error: '' };
+  var sp = store.get('phase');
+  if (sp !== null && PHASES[+sp]) state.phase = +sp;
+  else { var f = PHASES.indexOf('Final'); if (f >= 0) state.phase = f; }
+
+  function resum() {
+    state.sum = state.result ? C.summarize(state.result, state.phase) : null;
+    if (!state.sum) return;
+    var gs = state.sum.groups, cur = gs.filter(function (s) { return s.g.name === state.group; })[0];
+    if (!cur) {
+      var worst = gs.slice().sort(function (a, b) { return b.miss - a.miss; })[0];
+      state.group = worst ? worst.g.name : null;
+    }
+  }
+  function cur() { return state.sum ? state.sum.groups.filter(function (s) { return s.g.name === state.group; })[0] : null; }
+  function fails(s, e) { return s.req.filter(function (i) { return e.st[i] >= 1 && e.st[i] <= 3; }); }
+  function typeLabel(e) { return e.P ? e.P + (e.O && (e.P === 'USERDEFINED' || e.typeOk) ? ' · ' + e.O : '') : (e.O || ''); }
+
+  function renderHead() {
+    var r = state.result, s = state.sum, ph = PHASES[state.phase], verdict;
+    if (!s.elements) verdict = 'No elements covered by the rule file were found in this file.';
+    else if (!s.required) verdict = 'The rule file requires nothing at ' + esc(ph) + ' stage. Every requirement applies at Final.';
+    else if (!s.failing) verdict = '<b class="good">All ' + num(s.elements) + '</b> checked elements carry every property required at ' + esc(ph) + '.';
+    else verdict = '<b class="bad">' + num(s.failing) + '</b> of <b>' + num(s.elements) + '</b> checked elements are missing required properties at ' + esc(ph) + ': <b class="bad">' + num(s.missing) + '</b> missing values in all.';
+    var facts = [r.schema || 'Unknown schema', 'checked against the ' + r.ruleSet + ' rules', num(r.records) + ' records read'];
+    return '<div class="head">' + (state.example ? '<span class="example">Example model</span>' : '') +
+      '<h2>' + esc(state.file) + ' <code>' + esc(facts.join(' · ')) + '</code></h2>' +
+      '<p class="verdict">' + verdict + '</p>' +
+      (state.example ? '<p>This is a small made-up villa with deliberate gaps, shown so you can see what a report looks like. Drop your own IFC export to replace it.</p>' : '') + '</div>';
+  }
+  function renderSummary() {
+    var s = state.sum;
+    if (!s.groups.length) return '';
+    var h = '<div class="block"><div class="bar"><p class="eyebrow">Element groups in the model · select one to see its gaps</p>' +
+      (s.missing ? '<button type="button" class="btn ghost small" id="copy-all">Copy every issue for Excel</button>' : '') + '</div>' +
+      '<section class="sheet"><div class="scroll"><table><thead><tr><th scope="col">Element</th><th scope="col" class="num">In model</th><th scope="col" class="num">Incomplete</th><th scope="col" class="num">Missing values</th><th scope="col">Most often missing</th></tr></thead><tbody>';
+    s.groups.forEach(function (x) {
+      var top = C.topMissing(x, 3).map(function (p) { return esc(p[0]) + ' ×' + num(p[1]); }).join(', ');
+      h += '<tr class="pick" data-group="' + esc(x.g.name) + '"' + (x.g.name === state.group ? ' aria-current="true"' : '') + '>' +
+        '<td><button type="button" class="linkbtn" data-group="' + esc(x.g.name) + '">' + esc(x.g.name) + '</button> <span class="type">' + esc(x.g.type) + '</span></td>' +
+        '<td class="num">' + num(x.n) + '</td>' +
+        '<td class="num">' + (x.fail ? '<span class="hot">' + num(x.fail) + '</span>' : '<span class="zero">0</span>') + '</td>' +
+        '<td class="num">' + (x.miss ? '<span class="hot">' + num(x.miss) + '</span>' : '<span class="zero">0</span>') + '</td>' +
+        '<td class="type">' + (top || '–') + '</td></tr>';
+    });
+    return h + '</tbody></table></div></section></div>';
+  }
+  function renderByProp(s) {
+    var order = s.req.slice().sort(function (a, b) { return s.perAttr[b] - s.perAttr[a]; });
+    var h = '<section class="sheet"><div class="scroll"><table><thead><tr><th scope="col">Required property</th><th scope="col">Property set</th><th scope="col">Expects</th><th scope="col">Elements without it</th><th scope="col"><span class="sr">Actions</span></th></tr></thead><tbody>';
+    order.forEach(function (i) {
+      var a = s.g.attrs[i], m = s.perAttr[i], w = s.perWarn[i];
+      h += '<tr><td><span class="name">' + esc(a[2]) + '</span>' + (a[1] !== a[2] ? '<span class="note">Listed as ' + esc(a[1]) + '</span>' : '') + '</td>' +
+        '<td class="type">' + esc(a[0]) + '</td><td class="type">' + esc(a[3]) + (a[4] ? '<span class="note">e.g. ' + esc(a[4]) + '</span>' : '') + '</td>' +
+        '<td class="share">' + (m ? '<span class="hot">' + num(m) + '</span> of ' + num(s.n) + '<span class="meter"><i style="width:' + Math.max(3, Math.round(100 * m / s.n)) + '%"></i></span>' : '<span class="done">Complete</span>') +
+        (w ? '<span class="note">' + num(w) + ' with a value that does not read as ' + esc(a[3]) + '</span>' : '') + '</td>' +
+        '<td>' + (m ? '<button type="button" class="linkbtn" data-prop="' + i + '">Show elements</button>' : '') + '</td></tr>';
+    });
+    return h + '</tbody></table></div></section>';
+  }
+  function listed(s) {
+    return s.g.elements.filter(function (e) {
+      if (state.prop >= 0) return e.st[state.prop] >= 1 && e.st[state.prop] <= 3;
+      return !state.only || fails(s, e).length;
+    });
+  }
+  function renderByEl(s) {
+    var list = listed(s);
+    if (!list.length) return '<p class="empty">' + (s.n ? 'No element in this group is missing a required property.' : 'No elements.') + '</p>';
+    var h = '<section class="sheet"><div class="scroll"><table><thead><tr><th scope="col">Element</th><th scope="col">Revit ID</th><th scope="col">Storey</th><th scope="col">Type</th><th scope="col">Missing at ' + esc(PHASES[state.phase]) + '</th></tr></thead><tbody>';
+    list.slice(0, state.limit).forEach(function (e) {
+      var by = {}, sets = [], warn = [];
+      s.req.forEach(function (i) {
+        var c = e.st[i], a = s.g.attrs[i];
+        if (c === 4) warn.push(a[2]);
+        if (c < 1 || c > 3) return;
+        if (!by[a[0]]) { by[a[0]] = { absent: c === 1, names: [] }; sets.push(a[0]); }
+        by[a[0]].names.push([a[2], c]);
+      });
+      var cell = sets.map(function (p) {
+        return '<div><span class="set">' + esc(p) + (by[p].absent ? ' · whole set absent' : '') + '</span><br>' +
+          by[p].names.map(function (x) { return '<span class="chip" title="' + esc(C.PROBLEM[x[1]]) + '">' + esc(x[0]) + (x[1] === 3 ? ' (empty)' : '') + '</span>'; }).join('') + '</div>';
+      }).join('');
+      if (warn.length) cell += '<div><span class="set">Value is the wrong kind</span><br>' + warn.map(function (x) { return '<span class="chip w">' + esc(x) + '</span>'; }).join('') + '</div>';
+      h += '<tr><td>' + esc(e.name || '(unnamed)') + '<span class="note type">' + esc(e.gid) + '</span></td>' +
+        '<td class="type">' + (esc(e.tag) || '–') + '</td><td>' + (esc(e.storey) || '–') + '</td>' +
+        '<td class="type">' + (esc(typeLabel(e)) || '–') + (e.typeOk ? '<span class="note">not in the accepted list</span>' : '') + '</td>' +
+        '<td class="miss">' + (cell || '<span class="done">Complete</span>') + '</td></tr>';
+    });
+    h += '</tbody></table></div></section>';
+    if (list.length > state.limit) h += '<button type="button" class="btn ghost more" id="more">Show ' + num(Math.min(PAGE, list.length - state.limit)) + ' more of ' + num(list.length) + '</button>';
+    return h;
+  }
+  function renderDetail() {
+    var s = cur();
+    if (!s) return '';
+    var ph = PHASES[state.phase];
+    var h = '<div class="block" id="detail"><div class="head"><h2>' + esc(s.g.name) + ' <code>' + esc(s.g.type) + '</code></h2><p class="verdict">';
+    if (!s.req.length) h += 'Nothing is required of this element at ' + esc(ph) + '.';
+    else if (!s.fail) h += '<b class="good">All ' + num(s.n) + '</b> carry the ' + s.req.length + ' properties required at ' + esc(ph) + '.';
+    else h += '<b class="bad">' + num(s.fail) + '</b> of <b>' + num(s.n) + '</b> are incomplete against the ' + s.req.length + ' properties required at ' + esc(ph) + '.';
+    h += '</p></div>';
+    if (s.req.length) {
+      var list = listed(s), hasTags = list.some(function (e) { return e.tag; });
+      h += '<div class="bar"><div class="side"><div class="seg" role="group" aria-label="View">' +
+        '<button type="button" data-view="prop" aria-pressed="' + (state.view === 'prop') + '">By property</button>' +
+        '<button type="button" data-view="el" aria-pressed="' + (state.view === 'el') + '">By element</button></div>';
+      if (state.view === 'el') {
+        if (state.prop >= 0) h += '<span class="pill">Without <span class="name">' + esc(s.g.attrs[state.prop][2]) + '</span> <span class="type">' + esc(s.g.attrs[state.prop][0]) + '</span><button type="button" id="clear-prop" aria-label="Clear property filter">✕</button></span>';
+        else h += '<div class="seg" role="group" aria-label="Show"><button type="button" data-only="1" aria-pressed="' + state.only + '">Incomplete ' + num(s.fail) + '</button><button type="button" data-only="0" aria-pressed="' + !state.only + '">All ' + num(s.n) + '</button></div>';
+      }
+      h += '</div><div class="side">' +
+        (state.view === 'el' && hasTags ? '<button type="button" class="btn ghost small" id="copy-ids" title="Paste into Revit: Manage, Select by ID">Copy ' + num(list.length) + ' Revit IDs</button>' : '') +
+        (s.miss ? '<button type="button" class="btn ghost small" id="copy-group">Copy this group for Excel</button>' : '') + '</div></div>';
+      h += state.view === 'prop' ? renderByProp(s) : renderByEl(s);
+    }
+    if (s.typeAdv) {
+      var seen = {};
+      s.g.elements.forEach(function (e) { if (e.typeOk) { var k = typeLabel(e) || 'no type set'; seen[k] = (seen[k] || 0) + 1; } });
+      h += '<div class="notes"><p><b>' + num(s.typeAdv) + '</b> ' + (s.typeAdv === 1 ? 'element has' : 'elements have') + ' a type that is not in the checker’s accepted list for ' + esc(s.g.name) + ': ' +
+        Object.keys(seen).map(function (k) { return '<code>' + esc(k) + '</code> ×' + num(seen[k]); }).join(', ') +
+        '. This is advisory: how the official checker reads types from an export can differ, so compare with the accepted types in the requirements browser.</p></div>';
+    }
+    return h + '</div>';
+  }
+  function renderNotes() {
+    var r = state.result, keys = Object.keys(r.other), h = '';
+    if (keys.length) h += '<p><b>Not checked:</b> ' + keys.map(function (k) { return '<code>' + esc(k) + '</code> ×' + num(r.other[k]); }).join(', ') +
+      '. The rule file has no requirements for these types. If any of them should be a wall, slab or other listed element, fix its IFC export mapping.</p>';
+    if (state.sum.warn) h += '<p><b>' + num(state.sum.warn) + '</b> required ' + (state.sum.warn === 1 ? 'value is' : 'values are') + ' present but the wrong kind, such as text where a number is expected. They are not counted as missing; they show in amber in the By element view.</p>';
+    return h ? '<div class="block"><p class="eyebrow">Notes</p><div class="notes">' + h + '</div></div>' : '';
+  }
+  function render() {
+    var a = $('answer');
+    if (state.busy !== null) {
+      a.innerHTML = '<div class="head"><h2>Reading ' + esc(state.file) + '</h2><p class="verdict">' + esc(state.busy.label) + '</p><progress max="1" value="' + state.busy.done.toFixed(3) + '"></progress></div>';
+      return;
+    }
+    var h = state.error ? '<p class="error">' + esc(state.error) + '</p>' : '';
+    if (state.result) h += renderHead() + renderSummary() + renderDetail() + renderNotes();
+    a.innerHTML = h;
+    var el = $('q-phase'), o = el.options[el.selectedIndex];
+    if (!(window.CSS && CSS.supports && CSS.supports('field-sizing', 'content'))) el.style.width = ((o ? o.text.length : 6) * 0.56 + 1.4) + 'em';
+  }
+
+  var CAP = 200000; // rows; more than this is too much for the clipboard and for Excel to be useful
+  function tsv(rows) { return rows.slice(0, CAP + 1).map(function (r) { return r.map(function (v) { return String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' '); }).join('\t'); }).join('\n'); }
+  function copy(btn, text, okMsg) {
+    var label = btn.textContent;
+    var done = function (msg) { btn.textContent = msg === 'Copied' && okMsg ? okMsg : msg; setTimeout(function () { btn.textContent = label; }, 1800); };
+    var fallback = function () {
+      var t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(t); done(ok ? 'Copied' : 'Copy was blocked');
+    };
+    try { navigator.clipboard.writeText(text).then(function () { done('Copied'); }, fallback); } catch (e) { fallback(); }
+  }
+
+  function finish(model, name, example) {
+    state.result = C.evaluate(model, RULES);
+    state.file = name; state.example = !!example; state.busy = null; state.group = null; state.view = 'prop'; state.prop = -1; state.only = true; state.limit = PAGE;
+    if (!state.result.schema && !state.result.records) { state.result = null; state.error = name + ' does not look like an IFC file. Export from Revit as IFC (.ifc), not ifcZIP or ifcXML.'; }
+    resum(); render();
+    $('drop-text').innerHTML = example ? 'Drop an <b>.ifc</b> file anywhere on this page. It is read in your browser and is not uploaded.' : 'Showing <b>' + esc(name) + '</b>. Drop another .ifc file to replace it. Files are read in your browser and are not uploaded.';
+  }
+  function load(file) {
+    if (!file) return;
+    if (/\.(ifczip|ifcxml|zip)$/i.test(file.name)) { state.error = file.name + ' is a compressed or XML export. Export as plain IFC (.ifc) and drop that file.'; state.busy = null; render(); return; }
+    state.error = ''; state.file = file.name; state.busy = { done: 0, label: 'Starting…' }; render();
+    var parser = C.createParser(C.elementTypes(RULES)), total = file.size || 1, read = 0, last = 0;
+    var mb = function (b) { return (b / 1048576).toFixed(b > 10485760 ? 0 : 1) + ' MB'; };
+    var fail = function (e) { state.busy = null; state.error = 'Could not read ' + file.name + ': ' + (e && e.message ? e.message : e); render(); };
+    var end = function () {
+      state.busy = { done: 1, label: 'Checking properties…' }; render();
+      setTimeout(function () { try { finish(parser.finish(), file.name, false); } catch (e) { fail(e); } }, 30);
+    };
+    if (file.stream && window.TextDecoder) {
+      var reader = file.stream().getReader(), dec = new TextDecoder('utf-8');
+      var pump = function () {
+        reader.read().then(function (x) {
+          if (x.done) { parser.feed(dec.decode()); end(); return; }
+          parser.feed(dec.decode(x.value, { stream: true }));
+          read += x.value.length;
+          var now = Date.now();
+          if (now - last > 120) { last = now; state.busy = { done: read / total, label: mb(read) + ' of ' + mb(total) }; render(); setTimeout(pump, 0); } else pump();
+        }).catch(fail);
+      };
+      pump();
+    } else {
+      var fr = new FileReader();
+      fr.onload = function () { try { parser.feed(String(fr.result)); end(); } catch (e) { fail(e); } };
+      fr.onerror = function () { fail(fr.error); };
+      fr.readAsText(file);
+    }
+  }
+
+  $('q-phase').innerHTML = PHASES.map(function (p, i) { return '<option value="' + i + '">' + esc(p) + '</option>'; }).join('');
+  $('q-phase').value = state.phase;
+  $('q-phase').addEventListener('change', function (e) { state.phase = +e.target.value; store.set('phase', state.phase); state.prop = -1; state.limit = PAGE; resum(); render(); });
+  $('choose').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function (e) { load(e.target.files[0]); e.target.value = ''; });
+  var depth = 0, drop = $('drop');
+  window.addEventListener('dragenter', function (e) { e.preventDefault(); depth++; drop.classList.add('over'); });
+  window.addEventListener('dragleave', function () { depth = Math.max(0, depth - 1); if (!depth) drop.classList.remove('over'); });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); depth = 0; drop.classList.remove('over'); if (e.dataTransfer && e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('button, tr.pick') : null;
+    if (!t) return;
+    var d = t.dataset;
+    if (d.group) {
+      state.group = d.group; state.view = 'prop'; state.prop = -1; state.only = true; state.limit = PAGE; render();
+      var det = $('detail'); if (det && det.scrollIntoView) det.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+    else if (d.view) { state.view = d.view; state.prop = -1; state.limit = PAGE; render(); }
+    else if (d.only) { state.only = d.only === '1'; state.limit = PAGE; render(); }
+    else if (d.prop) { state.prop = +d.prop; state.view = 'el'; state.limit = PAGE; render(); }
+    else if (t.id === 'clear-prop') { state.prop = -1; render(); }
+    else if (t.id === 'more') { state.limit += PAGE; render(); }
+    else if (t.id === 'copy-all' || t.id === 'copy-group') {
+      var rows = C.issueRows(state.sum, t.id === 'copy-group' ? cur().g : null);
+      copy(t, tsv(rows), rows.length - 1 > CAP ? 'Copied first ' + num(CAP) + ' rows' : '');
+    }
+    else if (t.id === 'copy-ids') copy(t, listed(cur()).map(function (x) { return x.tag; }).filter(Boolean).join(';'));
+  });
+
+  $('schema').textContent = RULES.schema;
+  $('stamp').textContent = 'Rule file schema v' + RULES.schema + ' · ' + RULES.versions.map(function (v) { return v.name; }).join(' and ');
+  try {
+    var p = C.createParser(C.elementTypes(RULES));
+    p.feed(document.getElementById('sample-ifc').textContent);
+    finish(p.finish(), 'example-villa.ifc', true);
+  } catch (err) { state.error = 'The example could not be loaded: ' + err.message; render(); }
+})();
+</script>
+</body>
+</html>
