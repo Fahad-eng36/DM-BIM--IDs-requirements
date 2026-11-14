@@ -1,0 +1,399 @@
+<title>DM IFC Checker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout idea: same sheet as the requirements browser. The question is the control on top, a schedule of element groups answers it, and the selected group opens below as a snag list. */
+:root {
+  --paper: #F1F4F3;
+  --surface: #FFFFFF;
+  --ink: #12212B;
+  --muted: #4F5F69;
+  --line: #C9D2D5;
+  --accent: #0B5C7A;
+  --accent-soft: #DCEBF0;
+  --on-accent: #FFFFFF;
+  --bad: #A3301C;
+  --bad-soft: #F6E2DD;
+  --ok: #1E6A45;
+  --warn: #7A5200;
+  --warn-soft: #F6ECD2;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
+    --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C;
+    --bad: #F2917D; --bad-soft: #3B1D17; --ok: #74CC9C; --warn: #E3B65E; --warn-soft: #33290F; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
+  --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C;
+  --bad: #F2917D; --bad-soft: #3B1D17; --ok: #74CC9C; --warn: #E3B65E; --warn-soft: #33290F; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+header.top { border-bottom: 2px solid var(--ink); background: var(--surface); }
+.top .wrap { display: flex; flex-direction: column; gap: 20px; padding-block: 22px 26px; }
+.brand { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; font-family: var(--display); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
+.ask { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(30px, 4.6vw, 54px); line-height: 1.15; text-wrap: balance; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.ask select { field-sizing: content; font: inherit; color: var(--accent); background: var(--surface); border: 0; border-bottom: 4px solid var(--accent); border-radius: 0; padding: 0 4px 2px 0; max-width: 100%; cursor: pointer; }
+.ask select option { font-family: var(--body); font-size: 16px; font-weight: 400; color: var(--ink); }
+.drop { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 14px 16px; border: 1px dashed var(--muted); background: var(--paper); }
+.drop.over { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.drop p { margin: 0; flex: 1 1 280px; min-width: 0; color: var(--muted); }
+.drop p b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.btn { min-height: 44px; padding: 0 16px; font: inherit; font-weight: 600; color: var(--on-accent); background: var(--accent); border: 1px solid var(--accent); border-radius: 4px; cursor: pointer; }
+.btn.ghost { color: var(--ink); background: var(--surface); border-color: var(--muted); }
+.btn.small { min-height: 34px; padding: 0 12px; font-size: 14px; }
+
+main.answer { display: flex; flex-direction: column; gap: 30px; padding-block: 28px 56px; min-width: 0; }
+.head { display: flex; flex-direction: column; gap: 10px; }
+.head h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; line-height: 1.15; text-wrap: balance; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.head h2 code { font-family: var(--mono); font-weight: 500; font-size: 15px; color: var(--muted); }
+.head p { margin: 0; max-width: 72ch; color: var(--muted); }
+.head p.verdict { font-size: 18px; font-weight: 500; color: var(--ink); }
+.verdict b { font-family: var(--display); font-size: 22px; font-weight: 700; }
+.verdict b.bad { color: var(--bad); }
+.verdict b.good { color: var(--ok); }
+.eyebrow { margin: 0; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.example { align-self: flex-start; padding: 2px 9px; font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); border-radius: 3px; }
+.block { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.bar .side { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--ink); border-radius: 4px; overflow: hidden; }
+.seg button { min-height: 44px; padding: 0 16px; font: inherit; font-weight: 500; color: var(--ink); background: var(--surface); border: 0; border-right: 1px solid var(--ink); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+section.sheet { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ink); min-width: 0; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+tbody tr:last-child td { border-bottom: 0; }
+thead th { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+th:first-child, td:first-child { padding-left: 16px; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.num { font-family: var(--mono); }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--accent-soft); }
+tr.pick[aria-current="true"] td { background: var(--ink); color: var(--paper); }
+tr.pick[aria-current="true"] .linkbtn, tr.pick[aria-current="true"] .type, tr.pick[aria-current="true"] .zero, tr.pick[aria-current="true"] .hot { color: var(--paper); }
+.linkbtn { padding: 0; font: inherit; font-weight: 600; color: var(--accent); background: none; border: 0; text-decoration: underline; cursor: pointer; text-align: left; }
+.name { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
+.note { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.type { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.hot { color: var(--bad); font-weight: 600; }
+.zero { color: var(--muted); }
+.meter { display: block; width: 120px; max-width: 100%; height: 8px; margin-top: 6px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--bad); }
+td.share { min-width: 150px; }
+td.miss { min-width: 260px; }
+.miss div { margin-bottom: 4px; }
+.miss div:last-child { margin-bottom: 0; }
+.miss .set { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.chip { display: inline-block; margin: 1px 4px 1px 0; padding: 1px 7px; font-family: var(--mono); font-size: 12.5px; background: var(--bad-soft); color: var(--bad); border-radius: 3px; }
+.chip.w { background: var(--warn-soft); color: var(--warn); }
+.done { color: var(--ok); font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; font-size: 14px; background: var(--accent-soft); border-radius: 3px; }
+.pill button { min-width: 28px; min-height: 28px; font: inherit; color: var(--ink); background: transparent; border: 0; cursor: pointer; }
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.notes p { margin: 0; max-width: 78ch; padding: 10px 14px; background: var(--warn-soft); color: var(--ink); border-left: 3px solid var(--warn); }
+.notes p code { font-family: var(--mono); font-size: 13px; }
+.empty { margin: 0; padding: 28px 16px; background: var(--surface); border: 1px dashed var(--muted); color: var(--muted); }
+.error { margin: 0; padding: 14px 16px; background: var(--bad-soft); color: var(--bad); border-left: 3px solid var(--bad); font-weight: 500; }
+progress { width: min(420px, 100%); height: 10px; accent-color: var(--accent); }
+.more { align-self: flex-start; }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+footer .wrap { padding-block: 16px 28px; }
+footer p { margin: 0; max-width: 96ch; }
+@media (max-width: 860px) {
+  .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .head h2 { font-size: 26px; }
+}
+@media (prefers-reduced-motion: no-preference) { .seg button, tr.pick td { transition: background-color 120ms; } }
+</style>
+<!--BODY-->
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span>DM IFC checker</span><span id="stamp"></span></div>
+    <h1 class="ask">
+      <span>What is this model missing at</span>
+      <label class="sr" for="q-phase">Stage</label>
+      <select id="q-phase"></select>
+      <span>stage?</span>
+    </h1>
+    <div class="drop" id="drop">
+      <p id="drop-text">Drop an <b>.ifc</b> file anywhere on this page. It is read in your browser and is not uploaded.</p>
+      <input class="sr" type="file" id="file" accept=".ifc,.IFC" tabindex="-1">
+      <button type="button" class="btn" id="choose">Choose IFC file</button>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+  <main class="answer" id="answer" aria-live="polite"></main>
+</div>
+<footer>
+  <div class="wrap"><p>Unofficial pre-check built from the <code>IDS.json</code> rule file (schema version <span id="schema"></span>) that ships with the Dubai Municipality BIM tools. It checks that required properties exist and hold a value; it does not check geometry, usage codes or the values themselves. The official QA/QC checker remains the authority. See the <a href="/*__BROWSER_URL__*/">requirements browser</a> for what each element needs.</p></div>
+</footer>
+<script id="rules-data" type="application/json">/*__RULES__*/</script>
+<script id="sample-ifc" type="text/plain">/*__SAMPLE__*/</script>
+<script>/*__CORE__*/</script>
+<script>
+(function () {
+  var RULES = JSON.parse(document.getElementById('rules-data').textContent);
+  var PHASES = RULES.phases, C = window.DMCheck;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var num = function (n) { return Number(n).toLocaleString('en-US'); };
+  var store = {
+    get: function (k) { try { return localStorage.getItem('dmchk-' + k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem('dmchk-' + k, v); } catch (e) {} }
+  };
+  var PAGE = 150;
+  var state = { result: null, sum: null, phase: 1, group: null, view: 'prop', only: true, prop: -1, limit: PAGE, file: '', size: 0, example: false, busy: null, error: '' };
+  var sp = store.get('phase');
+  if (sp !== null && PHASES[+sp]) state.phase = +sp;
+  else { var f = PHASES.indexOf('Final'); if (f >= 0) state.phase = f; }
+
+  function resum() {
+    state.sum = state.result ? C.summarize(state.result, state.phase) : null;
+    if (!state.sum) return;
+    var gs = state.sum.groups, cur = gs.filter(function (s) { return s.g.name === state.group; })[0];
+    if (!cur) {
+      var worst = gs.slice().sort(function (a, b) { return b.miss - a.miss; })[0];
+      state.group = worst ? worst.g.name : null;
+    }
+  }
+  function cur() { return state.sum ? state.sum.groups.filter(function (s) { return s.g.name === state.group; })[0] : null; }
+  function fails(s, e) { return s.req.filter(function (i) { return e.st[i] >= 1 && e.st[i] <= 3; }); }
+  function typeLabel(e) { return e.P ? e.P + (e.O && (e.P === 'USERDEFINED' || e.typeOk) ? ' · ' + e.O : '') : (e.O || ''); }
+
+  function renderHead() {
+    var r = state.result, s = state.sum, ph = PHASES[state.phase], verdict;
+    if (!s.elements) verdict = 'No elements covered by the rule file were found in this file.';
+    else if (!s.required) verdict = 'The rule file requires nothing at ' + esc(ph) + ' stage. Every requirement applies at Final.';
+    else if (!s.failing) verdict = '<b class="good">All ' + num(s.elements) + '</b> checked elements carry every property required at ' + esc(ph) + '.';
+    else verdict = '<b class="bad">' + num(s.failing) + '</b> of <b>' + num(s.elements) + '</b> checked elements are missing required properties at ' + esc(ph) + ': <b class="bad">' + num(s.missing) + '</b> missing values in all.';
+    var facts = [r.schema || 'Unknown schema', 'checked against the ' + r.ruleSet + ' rules', num(r.records) + ' records read'];
+    return '<div class="head">' + (state.example ? '<span class="example">Example model</span>' : '') +
+      '<h2>' + esc(state.file) + ' <code>' + esc(facts.join(' · ')) + '</code></h2>' +
+      '<p class="verdict">' + verdict + '</p>' +
+      (state.example ? '<p>This is a small made-up villa with deliberate gaps, shown so you can see what a report looks like. Drop your own IFC export to replace it.</p>' : '') + '</div>';
+  }
+  function renderSummary() {
+    var s = state.sum;
+    if (!s.groups.length) return '';
+    var h = '<div class="block"><div class="bar"><p class="eyebrow">Element groups in the model · select one to see its gaps</p>' +
+      (s.missing ? '<button type="button" class="btn ghost small" id="copy-all">Copy every issue for Excel</button>' : '') + '</div>' +
+      '<section class="sheet"><div class="scroll"><table><thead><tr><th scope="col">Element</th><th scope="col" class="num">In model</th><th scope="col" class="num">Incomplete</th><th scope="col" class="num">Missing values</th><th scope="col">Most often missing</th></tr></thead><tbody>';
+    s.groups.forEach(function (x) {
+      var top = C.topMissing(x, 3).map(function (p) { return esc(p[0]) + ' ×' + num(p[1]); }).join(', ');
+      h += '<tr class="pick" data-group="' + esc(x.g.name) + '"' + (x.g.name === state.group ? ' aria-current="true"' : '') + '>' +
+        '<td><button type="button" class="linkbtn" data-group="' + esc(x.g.name) + '">' + esc(x.g.name) + '</button> <span class="type">' + esc(x.g.type) + '</span></td>' +
+        '<td class="num">' + num(x.n) + '</td>' +
+        '<td class="num">' + (x.fail ? '<span class="hot">' + num(x.fail) + '</span>' : '<span class="zero">0</span>') + '</td>' +
+        '<td class="num">' + (x.miss ? '<span class="hot">' + num(x.miss) + '</span>' : '<span class="zero">0</span>') + '</td>' +
+        '<td class="type">' + (top || '–') + '</td></tr>';
+    });
+    return h + '</tbody></table></div></section></div>';
+  }
+  function renderByProp(s) {
+    var order = s.req.slice().sort(function (a, b) { return s.perAttr[b] - s.perAttr[a]; });
+    var h = '<section class="sheet"><div class="scroll"><table><thead><tr><th scope="col">Required property</th><th scope="col">Property set</th><th scope="col">Expects</th><th scope="col">Elements without it</th><th scope="col"><span class="sr">Actions</span></th></tr></thead><tbody>';
+    order.forEach(function (i) {
+      var a = s.g.attrs[i], m = s.perAttr[i], w = s.perWarn[i];
+      h += '<tr><td><span class="name">' + esc(a[2]) + '</span>' + (a[1] !== a[2] ? '<span class="note">Listed as ' + esc(a[1]) + '</span>' : '') + '</td>' +
+        '<td class="type">' + esc(a[0]) + '</td><td class="type">' + esc(a[3]) + (a[4] ? '<span class="note">e.g. ' + esc(a[4]) + '</span>' : '') + '</td>' +
+        '<td class="share">' + (m ? '<span class="hot">' + num(m) + '</span> of ' + num(s.n) + '<span class="meter"><i style="width:' + Math.max(3, Math.round(100 * m / s.n)) + '%"></i></span>' : '<span class="done">Complete</span>') +
+        (w ? '<span class="note">' + num(w) + ' with a value that does not read as ' + esc(a[3]) + '</span>' : '') + '</td>' +
+        '<td>' + (m ? '<button type="button" class="linkbtn" data-prop="' + i + '">Show elements</button>' : '') + '</td></tr>';
+    });
+    return h + '</tbody></table></div></section>';
+  }
+  function listed(s) {
+    return s.g.elements.filter(function (e) {
+      if (state.prop >= 0) return e.st[state.prop] >= 1 && e.st[state.prop] <= 3;
+      return !state.only || fails(s, e).length;
+    });
+  }
+  function renderByEl(s) {
+    var list = listed(s);
+    if (!list.length) return '<p class="empty">' + (s.n ? 'No element in this group is missing a required property.' : 'No elements.') + '</p>';
+    var h = '<section class="sheet"><div class="scroll"><table><thead><tr><th scope="col">Element</th><th scope="col">Revit ID</th><th scope="col">Storey</th><th scope="col">Type</th><th scope="col">Missing at ' + esc(PHASES[state.phase]) + '</th></tr></thead><tbody>';
+    list.slice(0, state.limit).forEach(function (e) {
+      var by = {}, sets = [], warn = [];
+      s.req.forEach(function (i) {
+        var c = e.st[i], a = s.g.attrs[i];
+        if (c === 4) warn.push(a[2]);
+        if (c < 1 || c > 3) return;
+        if (!by[a[0]]) { by[a[0]] = { absent: c === 1, names: [] }; sets.push(a[0]); }
+        by[a[0]].names.push([a[2], c]);
+      });
+      var cell = sets.map(function (p) {
+        return '<div><span class="set">' + esc(p) + (by[p].absent ? ' · whole set absent' : '') + '</span><br>' +
+          by[p].names.map(function (x) { return '<span class="chip" title="' + esc(C.PROBLEM[x[1]]) + '">' + esc(x[0]) + (x[1] === 3 ? ' (empty)' : '') + '</span>'; }).join('') + '</div>';
+      }).join('');
+      if (warn.length) cell += '<div><span class="set">Value is the wrong kind</span><br>' + warn.map(function (x) { return '<span class="chip w">' + esc(x) + '</span>'; }).join('') + '</div>';
+      h += '<tr><td>' + esc(e.name || '(unnamed)') + '<span class="note type">' + esc(e.gid) + '</span></td>' +
+        '<td class="type">' + (esc(e.tag) || '–') + '</td><td>' + (esc(e.storey) || '–') + '</td>' +
+        '<td class="type">' + (esc(typeLabel(e)) || '–') + (e.typeOk ? '<span class="note">not in the accepted list</span>' : '') + '</td>' +
+        '<td class="miss">' + (cell || '<span class="done">Complete</span>') + '</td></tr>';
+    });
+    h += '</tbody></table></div></section>';
+    if (list.length > state.limit) h += '<button type="button" class="btn ghost more" id="more">Show ' + num(Math.min(PAGE, list.length - state.limit)) + ' more of ' + num(list.length) + '</button>';
+    return h;
+  }
+  function renderDetail() {
+    var s = cur();
+    if (!s) return '';
+    var ph = PHASES[state.phase];
+    var h = '<div class="block" id="detail"><div class="head"><h2>' + esc(s.g.name) + ' <code>' + esc(s.g.type) + '</code></h2><p class="verdict">';
+    if (!s.req.length) h += 'Nothing is required of this element at ' + esc(ph) + '.';
+    else if (!s.fail) h += '<b class="good">All ' + num(s.n) + '</b> carry the ' + s.req.length + ' properties required at ' + esc(ph) + '.';
+    else h += '<b class="bad">' + num(s.fail) + '</b> of <b>' + num(s.n) + '</b> are incomplete against the ' + s.req.length + ' properties required at ' + esc(ph) + '.';
+    h += '</p></div>';
+    if (s.req.length) {
+      var list = listed(s), hasTags = list.some(function (e) { return e.tag; });
+      h += '<div class="bar"><div class="side"><div class="seg" role="group" aria-label="View">' +
+        '<button type="button" data-view="prop" aria-pressed="' + (state.view === 'prop') + '">By property</button>' +
+        '<button type="button" data-view="el" aria-pressed="' + (state.view === 'el') + '">By element</button></div>';
+      if (state.view === 'el') {
+        if (state.prop >= 0) h += '<span class="pill">Without <span class="name">' + esc(s.g.attrs[state.prop][2]) + '</span> <span class="type">' + esc(s.g.attrs[state.prop][0]) + '</span><button type="button" id="clear-prop" aria-label="Clear property filter">✕</button></span>';
+        else h += '<div class="seg" role="group" aria-label="Show"><button type="button" data-only="1" aria-pressed="' + state.only + '">Incomplete ' + num(s.fail) + '</button><button type="button" data-only="0" aria-pressed="' + !state.only + '">All ' + num(s.n) + '</button></div>';
+      }
+      h += '</div><div class="side">' +
+        (state.view === 'el' && hasTags ? '<button type="button" class="btn ghost small" id="copy-ids" title="Paste into Revit: Manage, Select by ID">Copy ' + num(list.length) + ' Revit IDs</button>' : '') +
+        (s.miss ? '<button type="button" class="btn ghost small" id="copy-group">Copy this group for Excel</button>' : '') + '</div></div>';
+      h += state.view === 'prop' ? renderByProp(s) : renderByEl(s);
+    }
+    if (s.typeAdv) {
+      var seen = {};
+      s.g.elements.forEach(function (e) { if (e.typeOk) { var k = typeLabel(e) || 'no type set'; seen[k] = (seen[k] || 0) + 1; } });
+      h += '<div class="notes"><p><b>' + num(s.typeAdv) + '</b> ' + (s.typeAdv === 1 ? 'element has' : 'elements have') + ' a type that is not in the checker’s accepted list for ' + esc(s.g.name) + ': ' +
+        Object.keys(seen).map(function (k) { return '<code>' + esc(k) + '</code> ×' + num(seen[k]); }).join(', ') +
+        '. This is advisory: how the official checker reads types from an export can differ, so compare with the accepted types in the requirements browser.</p></div>';
+    }
+    return h + '</div>';
+  }
+  function renderNotes() {
+    var r = state.result, keys = Object.keys(r.other), h = '';
+    if (keys.length) h += '<p><b>Not checked:</b> ' + keys.map(function (k) { return '<code>' + esc(k) + '</code> ×' + num(r.other[k]); }).join(', ') +
+      '. The rule file has no requirements for these types. If any of them should be a wall, slab or other listed element, fix its IFC export mapping.</p>';
+    if (state.sum.warn) h += '<p><b>' + num(state.sum.warn) + '</b> required ' + (state.sum.warn === 1 ? 'value is' : 'values are') + ' present but the wrong kind, such as text where a number is expected. They are not counted as missing; they show in amber in the By element view.</p>';
+    return h ? '<div class="block"><p class="eyebrow">Notes</p><div class="notes">' + h + '</div></div>' : '';
+  }
+  function render() {
+    var a = $('answer');
+    if (state.busy !== null) {
+      a.innerHTML = '<div class="head"><h2>Reading ' + esc(state.file) + '</h2><p class="verdict">' + esc(state.busy.label) + '</p><progress max="1" value="' + state.busy.done.toFixed(3) + '"></progress></div>';
+      return;
+    }
+    var h = state.error ? '<p class="error">' + esc(state.error) + '</p>' : '';
+    if (state.result) h += renderHead() + renderSummary() + renderDetail() + renderNotes();
+    a.innerHTML = h;
+    var el = $('q-phase'), o = el.options[el.selectedIndex];
+    if (!(window.CSS && CSS.supports && CSS.supports('field-sizing', 'content'))) el.style.width = ((o ? o.text.length : 6) * 0.56 + 1.4) + 'em';
+  }
+
+  var CAP = 200000; // rows; more than this is too much for the clipboard and for Excel to be useful
+  function tsv(rows) { return rows.slice(0, CAP + 1).map(function (r) { return r.map(function (v) { return String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' '); }).join('\t'); }).join('\n'); }
+  function copy(btn, text, okMsg) {
+    var label = btn.textContent;
+    var done = function (msg) { btn.textContent = msg === 'Copied' && okMsg ? okMsg : msg; setTimeout(function () { btn.textContent = label; }, 1800); };
+    var fallback = function () {
+      var t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(t); done(ok ? 'Copied' : 'Copy was blocked');
+    };
+    try { navigator.clipboard.writeText(text).then(function () { done('Copied'); }, fallback); } catch (e) { fallback(); }
+  }
+
+  function finish(model, name, example) {
+    state.result = C.evaluate(model, RULES);
+    state.file = name; state.example = !!example; state.busy = null; state.group = null; state.view = 'prop'; state.prop = -1; state.only = true; state.limit = PAGE;
+    if (!state.result.schema && !state.result.records) { state.result = null; state.error = name + ' does not look like an IFC file. Export from Revit as IFC (.ifc), not ifcZIP or ifcXML.'; }
+    resum(); render();
+    $('drop-text').innerHTML = example ? 'Drop an <b>.ifc</b> file anywhere on this page. It is read in your browser and is not uploaded.' : 'Showing <b>' + esc(name) + '</b>. Drop another .ifc file to replace it. Files are read in your browser and are not uploaded.';
+  }
+  function load(file) {
+    if (!file) return;
+    if (/\.(ifczip|ifcxml|zip)$/i.test(file.name)) { state.error = file.name + ' is a compressed or XML export. Export as plain IFC (.ifc) and drop that file.'; state.busy = null; render(); return; }
+    state.error = ''; state.file = file.name; state.busy = { done: 0, label: 'Starting…' }; render();
+    var parser = C.createParser(C.elementTypes(RULES)), total = file.size || 1, read = 0, last = 0;
+    var mb = function (b) { return (b / 1048576).toFixed(b > 10485760 ? 0 : 1) + ' MB'; };
+    var fail = function (e) { state.busy = null; state.error = 'Could not read ' + file.name + ': ' + (e && e.message ? e.message : e); render(); };
+    var end = function () {
+      state.busy = { done: 1, label: 'Checking properties…' }; render();
+      setTimeout(function () { try { finish(parser.finish(), file.name, false); } catch (e) { fail(e); } }, 30);
+    };
+    if (file.stream && window.TextDecoder) {
+      var reader = file.stream().getReader(), dec = new TextDecoder('utf-8');
+      var pump = function () {
+        reader.read().then(function (x) {
+          if (x.done) { parser.feed(dec.decode()); end(); return; }
+          parser.feed(dec.decode(x.value, { stream: true }));
+          read += x.value.length;
+          var now = Date.now();
+          if (now - last > 120) { last = now; state.busy = { done: read / total, label: mb(read) + ' of ' + mb(total) }; render(); setTimeout(pump, 0); } else pump();
+        }).catch(fail);
+      };
+      pump();
+    } else {
+      var fr = new FileReader();
+      fr.onload = function () { try { parser.feed(String(fr.result)); end(); } catch (e) { fail(e); } };
+      fr.onerror = function () { fail(fr.error); };
+      fr.readAsText(file);
+    }
+  }
+
+  $('q-phase').innerHTML = PHASES.map(function (p, i) { return '<option value="' + i + '">' + esc(p) + '</option>'; }).join('');
+  $('q-phase').value = state.phase;
+  $('q-phase').addEventListener('change', function (e) { state.phase = +e.target.value; store.set('phase', state.phase); state.prop = -1; state.limit = PAGE; resum(); render(); });
+  $('choose').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function (e) { load(e.target.files[0]); e.target.value = ''; });
+  var depth = 0, drop = $('drop');
+  window.addEventListener('dragenter', function (e) { e.preventDefault(); depth++; drop.classList.add('over'); });
+  window.addEventListener('dragleave', function () { depth = Math.max(0, depth - 1); if (!depth) drop.classList.remove('over'); });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); depth = 0; drop.classList.remove('over'); if (e.dataTransfer && e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('button, tr.pick') : null;
+    if (!t) return;
+    var d = t.dataset;
+    if (d.group) {
+      state.group = d.group; state.view = 'prop'; state.prop = -1; state.only = true; state.limit = PAGE; render();
+      var det = $('detail'); if (det && det.scrollIntoView) det.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+    else if (d.view) { state.view = d.view; state.prop = -1; state.limit = PAGE; render(); }
+    else if (d.only) { state.only = d.only === '1'; state.limit = PAGE; render(); }
+    else if (d.prop) { state.prop = +d.prop; state.view = 'el'; state.limit = PAGE; render(); }
+    else if (t.id === 'clear-prop') { state.prop = -1; render(); }
+    else if (t.id === 'more') { state.limit += PAGE; render(); }
+    else if (t.id === 'copy-all' || t.id === 'copy-group') {
+      var rows = C.issueRows(state.sum, t.id === 'copy-group' ? cur().g : null);
+      copy(t, tsv(rows), rows.length - 1 > CAP ? 'Copied first ' + num(CAP) + ' rows' : '');
+    }
+    else if (t.id === 'copy-ids') copy(t, listed(cur()).map(function (x) { return x.tag; }).filter(Boolean).join(';'));
+  });
+
+  $('schema').textContent = RULES.schema;
+  $('stamp').textContent = 'Rule file schema v' + RULES.schema + ' · ' + RULES.versions.map(function (v) { return v.name; }).join(' and ');
+  try {
+    var p = C.createParser(C.elementTypes(RULES));
+    p.feed(document.getElementById('sample-ifc').textContent);
+    finish(p.finish(), 'example-villa.ifc', true);
+  } catch (err) { state.error = 'The example could not be loaded: ' + err.message; render(); }
+})();
+</script>
