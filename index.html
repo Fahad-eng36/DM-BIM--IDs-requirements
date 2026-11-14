@@ -17,6 +17,8 @@
   --accent: #0B5C7A;
   --accent-soft: #DCEBF0;
   --on-accent: #FFFFFF;
+  --arch: #B4541A;
+  --struct: #5546B0;
   --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
   --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
@@ -24,12 +26,12 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
-    --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C; color-scheme: dark;
+    --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C; --arch: #F0A26B; --struct: #AFA3F5; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --paper: #0D161B; --surface: #142128; --ink: #E6EDEF; --muted: #A3B3BA; --line: #2D3E47;
-  --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C; color-scheme: dark;
+  --accent: #6FC4DE; --accent-soft: #17343F; --on-accent: #06222C; --arch: #F0A26B; --struct: #AFA3F5; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -60,9 +62,18 @@ header.top { border-bottom: 2px solid var(--ink); background: var(--surface); }
 nav.index { flex: 0 0 250px; display: flex; flex-direction: column; gap: 8px; }
 .index h2, .eyebrow { margin: 0; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .index ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.index button { width: 100%; min-height: 38px; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px; font: inherit; color: var(--ink); text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; }
-.index button:hover { background: var(--accent-soft); }
-.index button[aria-current="true"] { background: var(--ink); color: var(--paper); font-weight: 600; }
+.index button { width: 100%; min-height: 38px; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px; font: inherit; color: var(--ink); text-align: left; background-color: transparent; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.index button:hover { background-color: var(--accent-soft); }
+.index button[aria-current="true"] { background-color: var(--ink); color: var(--paper); font-weight: 600; }
+/* Discipline colour: a stripe down the left edge of each element. "both" is split between the two colours. */
+.index button[data-disc] { padding-left: 16px; background-image: linear-gradient(var(--c1) 50%, var(--c2) 50%); background-size: 6px 100%; background-repeat: no-repeat; }
+[data-disc="arch"] { --c1: var(--arch); --c2: var(--arch); }
+[data-disc="struct"] { --c1: var(--struct); --c2: var(--struct); }
+[data-disc="both"] { --c1: var(--arch); --c2: var(--struct); }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.legend li, .disc { display: inline-flex; align-items: center; gap: 6px; }
+.legend i, .disc i { width: 10px; height: 10px; border-radius: 2px; background: linear-gradient(var(--c1) 50%, var(--c2) 50%); }
+.head h2 .disc { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .index .n { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.85; }
 main.answer { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 26px; }
 
@@ -146,6 +157,7 @@ footer p { margin: 0; max-width: 90ch; }
 <div class="wrap layout">
   <nav class="index" aria-label="Elements">
     <h2 id="index-title">Elements</h2>
+    <ul class="legend" aria-label="Colour key"><li data-disc="arch"><i></i>Architecture</li><li data-disc="struct"><i></i>Structure</li><li data-disc="both"><i></i>Both</li></ul>
     <ol id="index"></ol>
   </nav>
   <main class="answer" id="answer" aria-live="polite"></main>
@@ -195,13 +207,23 @@ footer p { margin: 0; max-width: 90ch; }
     $('q-ifc').innerHTML = DATA.versions.map(function (v, i) { return '<option value="' + i + '">' + esc(v.name) + '</option>'; }).join('');
     $('q-ifc').value = state.ver;
   }
+  // Discipline of each element group, by its IFC type. Edit this list to recolour the index.
+  // Types not listed (project, site, building, storey) are general and get no colour.
+  var DISC = {
+    arch: ['IfcCovering', 'IfcCurtainWall', 'IfcDoor', 'IfcSpace', 'IfcRailing', 'IfcRamp', 'IfcRampFlight', 'IfcRoof', 'IfcStair', 'IfcStairFlight', 'IfcTransportElement', 'IfcWasteTerminal', 'IfcTank', 'IfcWindow'],
+    struct: ['IfcBeam', 'IfcColumn', 'IfcFooting', 'IfcMember', 'IfcPile', 'IfcPlate', 'IfcElementAssembly', 'IfcCivilElement'],
+    both: ['IfcWall', 'IfcSlab']
+  };
+  var DISC_NAME = { arch: 'Architecture', struct: 'Structure', both: 'Architecture and structure' };
+  function disc(g) { for (var k in DISC) if (DISC[k].indexOf(g.type) !== -1) return k; return ''; }
   function renderIndex() {
     var cur = slug(current().name);
     $('index-title').textContent = 'Elements · required at ' + PHASES[state.phase];
     $('index').innerHTML = groups().map(function (g) {
       var n = g.attrs.filter(function (a) { return isReq(a, state.phase); }).length;
       var s = slug(g.name);
-      return '<li><button type="button" data-group="' + s + '"' + (s === cur && !state.q ? ' aria-current="true"' : '') + '><span>' + esc(g.name) + '</span><span class="n">' + n + '</span></button></li>';
+      var d = disc(g);
+      return '<li><button type="button" data-group="' + s + '"' + (d ? ' data-disc="' + d + '" title="' + DISC_NAME[d] + '"' : '') + (s === cur && !state.q ? ' aria-current="true"' : '') + '><span>' + esc(g.name) + '</span><span class="n">' + n + '</span></button></li>';
     }).join('');
   }
   function phaseCells(a) {
@@ -239,7 +261,8 @@ footer p { margin: 0; max-width: 90ch; }
     if (!total) verdict = 'The rule file lists no properties for this element. Only its type is checked.';
     else if (!req) verdict = 'Nothing is required at ' + esc(ph) + '. All <b>' + total + '</b> properties are optional at this stage.';
     else verdict = '<b>' + req + '</b> of <b>' + total + '</b> properties are required at ' + esc(ph) + '.';
-    var h = '<div class="head"><h2>' + esc(g.name) + ' <code>' + esc(g.type) + '</code></h2>' +
+    var dk = disc(g);
+    var h = '<div class="head"><h2>' + esc(g.name) + ' <code>' + esc(g.type) + '</code>' + (dk ? '<span class="disc" data-disc="' + dk + '"><i></i>' + DISC_NAME[dk] + '</span>' : '') + '</h2>' +
       (g.desc ? '<p>' + esc(g.desc) + '</p>' : '') + '<p class="verdict">' + verdict + '</p></div>';
     if (total) {
       h += '<div class="bar"><div class="seg" role="group" aria-label="Show">' +
