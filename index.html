@@ -69,10 +69,12 @@ nav.index { flex: 0 0 250px; display: flex; flex-direction: column; gap: 8px; }
 .index button[data-disc] { padding-left: 16px; background-image: linear-gradient(var(--c1) 50%, var(--c2) 50%); background-size: 6px 100%; background-repeat: no-repeat; }
 [data-disc="arch"] { --c1: var(--arch); --c2: var(--arch); }
 [data-disc="struct"] { --c1: var(--struct); --c2: var(--struct); }
-[data-disc="both"] { --c1: var(--arch); --c2: var(--struct); }
-.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
-.legend li, .disc { display: inline-flex; align-items: center; gap: 6px; }
-.legend i, .disc i { width: 10px; height: 10px; border-radius: 2px; background: linear-gradient(var(--c1) 50%, var(--c2) 50%); }
+[data-disc="general"] { --c1: var(--muted); --c2: var(--muted); }
+.index .sec { display: flex; align-items: center; gap: 8px; padding: 16px 0 6px; font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); border-bottom: 2px solid var(--c1); }
+.index .sec:first-child { padding-top: 6px; }
+.index ol { border-top: 0; }
+.disc { display: inline-flex; align-items: center; gap: 6px; }
+.sec i, .disc i { width: 10px; height: 10px; border-radius: 2px; background: linear-gradient(var(--c1) 50%, var(--c2) 50%); }
 .head h2 .disc { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .index .n { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.85; }
 main.answer { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 26px; }
@@ -156,9 +158,7 @@ footer p { margin: 0; max-width: 90ch; }
 </header>
 <div class="wrap layout">
   <nav class="index" aria-label="Elements">
-    <h2 id="index-title">Elements</h2>
-    <ul class="legend" aria-label="Colour key"><li data-disc="arch"><i></i>Architecture</li><li data-disc="struct"><i></i>Structure</li><li data-disc="both"><i></i>Both</li></ul>
-    <ol id="index"></ol>
+    <h2 id="index-title">Elements</h2>    <ol id="index"></ol>
   </nav>
   <main class="answer" id="answer" aria-live="polite"></main>
 </div>
@@ -199,31 +199,38 @@ footer p { margin: 0; max-width: 90ch; }
   }
   function isStandard(a) { return /^IFC Standard Property/i.test(a[7] || ''); }
 
+  // The structural elements are listed here in the order they appear in the index; project-level items are general;
+  // every other element is architecture.
+  var STRUCT = ['IfcFooting', 'IfcPile', 'IfcSlab', 'IfcWall', 'IfcColumn', 'IfcBeam', 'IfcMember', 'IfcPlate', 'IfcStair', 'IfcRamp', 'IfcRoof'];
+  var GENERAL = ['IfcProject', 'IfcSite', 'IfcBuilding', 'IfcBuildingStorey'];
+  var SECTIONS = ['general', 'struct', 'arch'];
+  var DISC_NAME = { general: 'General', arch: 'Architecture', struct: 'Structure' };
+  function disc(g) { return STRUCT.indexOf(g.type) !== -1 ? 'struct' : GENERAL.indexOf(g.type) !== -1 ? 'general' : 'arch'; }
+  // Groups of one section, kept under each other: structure in the STRUCT order, the rest in rule-file order.
+  function section(k) {
+    var gs = groups().filter(function (g) { return disc(g) === k; });
+    if (k === 'struct') gs.sort(function (a, b) { return STRUCT.indexOf(a.type) - STRUCT.indexOf(b.type); });
+    return gs;
+  }
   function fillControls() {
-    $('q-group').innerHTML = groups().map(function (g) { return '<option value="' + slug(g.name) + '">' + esc(g.name) + '</option>'; }).join('');
+    $('q-group').innerHTML = SECTIONS.map(function (k) {
+      return '<optgroup label="' + DISC_NAME[k] + '">' + section(k).map(function (g) { return '<option value="' + slug(g.name) + '">' + esc(g.name) + '</option>'; }).join('') + '</optgroup>';
+    }).join('');
     $('q-group').value = slug(current().name);
     $('q-phase').innerHTML = PHASES.map(function (p, i) { return '<option value="' + i + '">' + esc(p) + '</option>'; }).join('');
     $('q-phase').value = state.phase;
     $('q-ifc').innerHTML = DATA.versions.map(function (v, i) { return '<option value="' + i + '">' + esc(v.name) + '</option>'; }).join('');
     $('q-ifc').value = state.ver;
   }
-  // Discipline of each element group, by its IFC type. Edit this list to recolour the index.
-  // Types not listed (project, site, building, storey) are general and get no colour.
-  var DISC = {
-    arch: ['IfcCovering', 'IfcCurtainWall', 'IfcDoor', 'IfcSpace', 'IfcRailing', 'IfcRamp', 'IfcRampFlight', 'IfcRoof', 'IfcStair', 'IfcStairFlight', 'IfcTransportElement', 'IfcWasteTerminal', 'IfcTank', 'IfcWindow'],
-    struct: ['IfcBeam', 'IfcColumn', 'IfcFooting', 'IfcMember', 'IfcPile', 'IfcPlate', 'IfcElementAssembly', 'IfcCivilElement'],
-    both: ['IfcWall', 'IfcSlab']
-  };
-  var DISC_NAME = { arch: 'Architecture', struct: 'Structure', both: 'Architecture and structure' };
-  function disc(g) { for (var k in DISC) if (DISC[k].indexOf(g.type) !== -1) return k; return ''; }
   function renderIndex() {
     var cur = slug(current().name);
     $('index-title').textContent = 'Elements · required at ' + PHASES[state.phase];
-    $('index').innerHTML = groups().map(function (g) {
-      var n = g.attrs.filter(function (a) { return isReq(a, state.phase); }).length;
-      var s = slug(g.name);
-      var d = disc(g);
-      return '<li><button type="button" data-group="' + s + '"' + (d ? ' data-disc="' + d + '" title="' + DISC_NAME[d] + '"' : '') + (s === cur && !state.q ? ' aria-current="true"' : '') + '><span>' + esc(g.name) + '</span><span class="n">' + n + '</span></button></li>';
+    $('index').innerHTML = SECTIONS.map(function (k) {
+      return '<li class="sec" data-disc="' + k + '"><i></i>' + DISC_NAME[k] + '</li>' + section(k).map(function (g) {
+        var n = g.attrs.filter(function (a) { return isReq(a, state.phase); }).length;
+        var s = slug(g.name);
+        return '<li><button type="button" data-group="' + s + '" data-disc="' + k + '"' + (s === cur && !state.q ? ' aria-current="true"' : '') + '><span>' + esc(g.name) + '</span><span class="n">' + n + '</span></button></li>';
+      }).join('');
     }).join('');
   }
   function phaseCells(a) {
@@ -262,7 +269,7 @@ footer p { margin: 0; max-width: 90ch; }
     else if (!req) verdict = 'Nothing is required at ' + esc(ph) + '. All <b>' + total + '</b> properties are optional at this stage.';
     else verdict = '<b>' + req + '</b> of <b>' + total + '</b> properties are required at ' + esc(ph) + '.';
     var dk = disc(g);
-    var h = '<div class="head"><h2>' + esc(g.name) + ' <code>' + esc(g.type) + '</code>' + (dk ? '<span class="disc" data-disc="' + dk + '"><i></i>' + DISC_NAME[dk] + '</span>' : '') + '</h2>' +
+    var h = '<div class="head"><h2>' + esc(g.name) + ' <code>' + esc(g.type) + '</code>' + (dk !== 'general' ? '<span class="disc" data-disc="' + dk + '"><i></i>' + DISC_NAME[dk] + '</span>' : '') + '</h2>' +
       (g.desc ? '<p>' + esc(g.desc) + '</p>' : '') + '<p class="verdict">' + verdict + '</p></div>';
     if (total) {
       h += '<div class="bar"><div class="seg" role="group" aria-label="Show">' +
